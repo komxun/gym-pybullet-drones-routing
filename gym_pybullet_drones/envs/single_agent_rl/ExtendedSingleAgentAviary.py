@@ -91,7 +91,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
         # dynamics_attributes = True if act in [ActionType.DYN, ActionType.ONE_D_DYN] else False
         self.OBS_TYPE = obs
         self.ACT_TYPE = act
-        self.EPISODE_LEN_SEC = 5
+        self.EPISODE_LEN_SEC = 60
         #### Create integrated Controllers and Routers #########################
         if act in [ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -137,8 +137,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
 
         """
         if self.ACT_TYPE == ActionType.AUTOROUTING:
-            # return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
-            return spaces.Box(low=0, high=4, shape=(1,), dtype=np.float32)
+            return spaces.Discrete(4)  # 5 discrete actions, details in _preprocessAction()
+            # return spaces.Box(low=0, high=4, shape=(1,), dtype=np.float32)
         else:
             return super()._actionSpace()
 
@@ -170,39 +170,45 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             
             
             # CHECK THIS CAREFULLY!!!
-            action = int(action[0])
+            # action = int(action[0])
             
             state = self._getDroneStateVector(0)
-            #------- Compute route (waypoint) to follow ----------------
-            foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
-                                                                 state = state, 
-                                                                 home_pos = np.array([0,0,0.1125]), 
-                                                                 target_pos = np.array((0.2, 10, 1)),
-                                                                 speed_limit = self.SPEED_LIMIT,
-                                                                 obstacles_pos = self.obs_pos,
-                                                                 obstacles_size = self.obs_size,
-                                                                 )
-            if foundPath>0:
-                if self.routing.route_counter == 1:
-                    self.routing.setGlobalRoute(path)
-                
-                if action == 0:  # Constant Vel
-                    self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
-                elif action == 1:  # Accelerate
-                    self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.01)
-                elif action == 2:  # Decelerate
-                    self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
-                elif action == 3:  # Stop (Hover)
-                    self.routing._setCommand(SpeedCommandFlag, "hover")
-                elif action == 4:  # Change Route
-                    self.routing._setCommand(RouteCommandFlag, "change_route")
-                else:
-                    print("[ERROR] in ExtendedSingleAgentAviary._preprocessAction()")
-                    raise ValueError(f"Invalid action: {action}")
-            else:
-                print("Alert: no route found!--> following global route")
-                self.routing._setCommand(RouteCommandFlag, "follow_global")
             
+            if self.routing.route_counter == 0:
+                print("Calculating Global Route . . .")
+                #------- Compute route (waypoint) to follow ----------------
+                foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
+                                                                     state = state, 
+                                                                     home_pos = np.array([0,0,1]), 
+                                                                     target_pos = np.array((0.2, 10, 1)),
+                                                                     speed_limit = self.SPEED_LIMIT,
+                                                                     obstacles_pos = self.obs_pos,
+                                                                     obstacles_size = self.obs_size,
+                                                                     )
+                if foundPath>0:
+                    self.routing.setGlobalRoute(path)
+                else:
+                    raise ValueError("[Error] Global route was not found. Mission aborted.")
+            else:
+                self.routing._updateTargetPosAndVel(self.routing.GLOBAL_PATH, self.routing.route_counter, self.SPEED_LIMIT)
+    
+            if action == 0:  # Constant Vel
+                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
+            elif action == 1:  # Accelerate
+                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
+            elif action == 2:  # Decelerate
+                self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
+            elif action == 3:  # Stop (Hover)
+                self.routing._setCommand(SpeedCommandFlag, "hover")
+            # elif action == 4:  # Change Route
+            #     self.routing._setCommand(RouteCommandFlag, "change_route")
+            #     if self.routing.STAT:
+            #         print("Alert: no route found!--> following global route")
+            #         self.routing._setCommand(RouteCommandFlag, "follow_global")
+            else:
+                print("[ERROR] in ExtendedSingleAgentAviary._preprocessAction()")
+                raise ValueError(f"Invalid action: {action}")
+                
             #### Compute control for the current way point #############
             rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
                                                                    state=state,
@@ -210,6 +216,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                                                                    target_rpy = state[7:10],
                                                                    target_vel = self.routing.TARGET_VEL
                                                                    )
+            self.routing._updateCurPos(state[0:3])
+            self.routing._updateCurVel(state[10:13])
             return rpm.astype(np.float32)  # Ensure rpm is returned as float32        
         else:
             return super()._preprocessAction(action)
