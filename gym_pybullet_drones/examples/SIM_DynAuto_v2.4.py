@@ -23,8 +23,7 @@ In a terminal, run as:
 """
 
 import sys
-sys.path.append('../')
-sys.path.insert(0,'/Users/Komsun/Desktop/pybullet-drones/Di-Pegasus-Phase1')
+sys.path.append('../../')   # Locate gym_pybullet_drones directory
 import os
 import time
 import argparse
