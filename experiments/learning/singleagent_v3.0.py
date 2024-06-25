@@ -47,21 +47,31 @@ from stable_baselines3.td3 import MlpPolicy as td3ddpgMlpPolicy
 from stable_baselines3.td3 import CnnPolicy as td3ddpgCnnPolicy
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, StopTrainingOnRewardThreshold
 
+from gym_pybullet_drones.envs.single_agent_rl.AutoroutingAviary import AutoroutingAviary
 from gym_pybullet_drones.envs.single_agent_rl.TakeoffAviary import TakeoffAviary
 from gym_pybullet_drones.envs.single_agent_rl.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGateAviary
 from gym_pybullet_drones.envs.single_agent_rl.TuneAviary import TuneAviary
-from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
+from gym_pybullet_drones.envs.single_agent_rl.ExtendedSingleAgentAviary import ActionType, ObservationType
+from gym_pybullet_drones.utils.utils import sync
 
 import shared_constants
 
 EPISODE_REWARD_THRESHOLD = -0 # Upperbound: rewards are always negative, but non-zero
 """float: Reward threshold to halt the script."""
 
-DEFAULT_ENV = 'hover'
-DEFAULT_ALGO = 'ppo'
+# DEFAULT_ENV = 'hover'
+# DEFAULT_ALGO = 'ppo'
+# DEFAULT_OBS = ObservationType('kin')
+# DEFAULT_ACT = ActionType('one_d_rpm')
+# DEFAULT_CPU = 1
+# DEFAULT_STEPS = 35000
+# DEFAULT_OUTPUT_FOLDER = 'results'
+
+DEFAULT_ENV = 'ca_static'
+DEFAULT_ALGO = 'a2c'
 DEFAULT_OBS = ObservationType('kin')
-DEFAULT_ACT = ActionType('one_d_rpm')
+DEFAULT_ACT = ActionType('autorouting')
 DEFAULT_CPU = 1
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
@@ -129,6 +139,12 @@ def run(
                                  )
     if env_name == "tune-aviary-v0":
         train_env = make_vec_env(TuneAviary,
+                                 env_kwargs=sa_env_kwargs,
+                                 n_envs=cpu,
+                                 seed=0
+                                 )
+    if env_name == "ca_static-aviary-v0":
+        train_env = make_vec_env(AutoroutingAviary,
                                  env_kwargs=sa_env_kwargs,
                                  n_envs=cpu,
                                  seed=0
@@ -239,6 +255,12 @@ def run(
                                     n_envs=1,
                                     seed=0
                                     )
+        if env_name == "ca_static-aviary-v0":
+            eval_env = make_vec_env(AutoroutingAviary,
+                                    env_kwargs=sa_env_kwargs,
+                                    n_envs=1,
+                                    seed=0
+                                    )
         eval_env = VecTransposeImage(eval_env)
     
     #### Create a separate rendering environment (non-vectorized)
@@ -253,6 +275,9 @@ def run(
                                        obs=ARGS.obs, act=ARGS.act, gui=True)
     if env_name == "tune-aviary-v0": 
         render_env = TuneAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                obs=ARGS.obs, act=ARGS.act, gui=True)
+    if env_name == "ca_static-aviary-v0":
+        render_env = AutoroutingAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
                                 obs=ARGS.obs, act=ARGS.act, gui=True)
     
     #### Train the model #######################################
@@ -277,7 +302,7 @@ def run(
     ####### Train and render #####################################
     total_timesteps = 35000
     log_interval = 1
-    timesteps_per_render = 50  # Change this to control how often you want to render
+    timesteps_per_render = 100  # Change this to control how often you want to render
 
     START = time.time()
     
@@ -291,8 +316,8 @@ def run(
             env.render()
             # sync(i, START, render_env.TIMESTEP)
     
-    render_env.reset()
-    obs = render_env.reset()
+    # render_env.reset()
+    # obs = render_env.reset()
     for i in range(0, total_timesteps, timesteps_per_render):
         # Train the model for a chunk of timesteps
         model.learn(total_timesteps=timesteps_per_render, callback=eval_callback, log_interval=log_interval)
@@ -313,7 +338,7 @@ def run(
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Single agent reinforcement learning experiments script')
-    parser.add_argument('--env',        default=DEFAULT_ENV,      type=str,             choices=['takeoff', 'hover', 'flythrugate', 'tune'], help='Task (default: hover)', metavar='')
+    parser.add_argument('--env',        default=DEFAULT_ENV,      type=str,             choices=['takeoff', 'hover', 'flythrugate', 'tune', 'ca_static'], help='Task (default: hover)', metavar='')
     parser.add_argument('--algo',       default=DEFAULT_ALGO,        type=str,             choices=['a2c', 'ppo', 'sac', 'td3', 'ddpg'],        help='RL agent (default: ppo)', metavar='')
     parser.add_argument('--obs',        default=DEFAULT_OBS,        type=ObservationType,                                                      help='Observation space (default: kin)', metavar='')
     parser.add_argument('--act',        default=DEFAULT_ACT,  type=ActionType,                                                           help='Action space (default: one_d_rpm)', metavar='')
