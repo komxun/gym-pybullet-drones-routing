@@ -22,6 +22,25 @@ register(
 
 
 
+# New--------------------------------------------------
+
+
+register(
+    id='routing-aviary-v0',
+    entry_point='gym_pybullet_drones.envs:RoutingAviary',
+)
+
+register(
+    id='extendedsingleagent-aviary-v0',
+    entry_point='gym_pybullet_drones.envs.single_agent_rl:ExtendedSingleAgentAviary',
+)
+
+register(
+    id='ca_static-aviary-v0',
+    entry_point='gym_pybullet_drones.envs.single_agent_rl:AutoroutingAviary',
+)
+
+# -----------------------------------------------------
 
 register(
     id='takeoff-aviary-v0',
