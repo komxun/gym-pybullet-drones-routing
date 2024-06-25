@@ -19,6 +19,8 @@ To check the tensorboard results at:
     http://localhost:6006/
 
 """
+import sys
+sys.path.append('../../')
 import os
 import time
 from datetime import datetime
