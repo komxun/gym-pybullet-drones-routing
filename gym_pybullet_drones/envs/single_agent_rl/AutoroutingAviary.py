@@ -14,7 +14,7 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
     
     def __init__(self,
                  drone_model: DroneModel=DroneModel.CF2X,
-                 initial_xyzs=None,
+                 initial_xyzs=np.array([0,0,0.5]).reshape(1,3),
                  initial_rpys=None,
                  physics: Physics=Physics.PYB,
                  freq: int=240,
@@ -102,9 +102,9 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         cond2 = np.linalg.norm(np.array([0.2, 10, 1])-state[0:3]) <= 0.5
         if cond1 or cond2:
             if cond1:
-                print("----------------Exit episode due to timeout---------------------")
+                print("########## Exit episode due to timeout ############")
             elif cond2:
-                print("---------Exit episode due to destination reached----------------")
+                print("o=o=o=o= Exit episode due to destination reached o=o=o=o")
             return True
         else:
             return False

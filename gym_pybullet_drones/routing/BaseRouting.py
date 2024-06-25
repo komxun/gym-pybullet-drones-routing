@@ -158,24 +158,24 @@ class BaseRouting(object):
         if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
             # accelerate
             if self.COMMANDS[1]._value > 0:
-                print("Accelerating . . .")
+                # print("Accelerating . . .")
                 self.STAT[1] = SpeedStatus.ACCELERATE
             elif self.COMMANDS[1]._value < 0:
-                print("Decelerating . . .")
+                # print("Decelerating . . .")
                 self.STAT[1] = SpeedStatus.DECELERATE
             elif self.COMMANDS[1]._value == 0:
-                print("Constant Speed . . .")
+                # print("Constant Speed . . .")
                 self.STAT[1] = SpeedStatus.CONSTANT
                 self.TARGET_VEL = np.zeros(3)
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
-            print("Constant Speed . . .")
+            # print("Constant Speed . . .")
             self.TARGET_VEL = np.zeros(3)
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
             # hover
             if self.STAT[1] != SpeedStatus.HOVERING:
-                print("*Activate Hovering Mode!")
+                # print("*Activate Hovering Mode!")
                 self.TARGET_POS = self.CUR_POS
                 self.TARGET_VEL = np.zeros(3)
                 self.STAT[1] = SpeedStatus.HOVERING
@@ -188,12 +188,12 @@ class BaseRouting(object):
     def switchRoute(self):
         """Switch current route from global to local, or from local to global"""
         if self.STAT[0].value == RouteStatus.GLOBAL.value:
-            print("Switching to Local route")
+            # print("Switching to Local route")
             self.STAT[0] = RouteStatus.LOCAL
             self.SIM_MODE = 1
         
         elif self.STAT[0].value == RouteStatus.LOCAL.value:
-            print("Switching to Global route")
+            # print("Switching to Global route")
             self.STAT[0] = RouteStatus.GLOBAL
             self.SIM_MODE =2
              

@@ -34,7 +34,6 @@ import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
-from DynamicAutorouting import Main
 
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary

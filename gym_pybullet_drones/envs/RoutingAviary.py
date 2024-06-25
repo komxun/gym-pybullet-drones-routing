@@ -198,10 +198,10 @@ class RoutingAviary(CtrlAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        RoutingAviary.OBSTACLE_IDS.append(
-                           p.loadURDF("samurai.urdf",
-                           physicsClientId=self.CLIENT
-                           ))
+        # RoutingAviary.OBSTACLE_IDS.append(
+        #                     p.loadURDF("samurai.urdf",
+        #                     physicsClientId=self.CLIENT
+        #                     ))
 
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("cube_no_rotation.urdf",
