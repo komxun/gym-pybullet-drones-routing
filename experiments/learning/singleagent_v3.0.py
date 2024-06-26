@@ -76,6 +76,8 @@ DEFAULT_CPU = 1
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
 
+komsunWantsRender = False
+
 def run(
     env=DEFAULT_ENV,
     algo=DEFAULT_ALGO,
@@ -294,36 +296,37 @@ def run(
                                  deterministic=True,
                                  render=False
                                  )
-    # model.learn(total_timesteps=steps, #int(1e12),
-    #             callback=eval_callback,
-    #             log_interval=100,
-    #             )
+    if not komsunWantsRender:
+        model.learn(total_timesteps=steps, #int(1e12),
+                    callback=eval_callback,
+                    log_interval=100,
+                    )
+    else:
+        ####### Train and render #####################################
+        total_timesteps = 35000
+        log_interval = 100
+        timesteps_per_render = 2  # Change this to control how often you want to render
     
-    ####### Train and render #####################################
-    total_timesteps = 35000
-    log_interval = 100
-    timesteps_per_render = 1  # Change this to control how often you want to render
-
-    START = time.time()
+        START = time.time()
+        
+        # Rendering loop
+        def render_loop(env, model, timesteps_per_render):
+            obs = env.reset()
+            done = False
+            while not done:
+                action, _ = model.predict(obs, deterministic=True)
+                obs, reward, done, info = env.step(action)
+                env.render()
+                # sync(i, START, render_env.TIMESTEP)
+        
+        # render_env.reset()
+        # obs = render_env.reset()
+        for i in range(0, total_timesteps, timesteps_per_render):
+            # Train the model for a chunk of timesteps
+            model.learn(total_timesteps=100, callback=eval_callback, log_interval=log_interval)
     
-    # Rendering loop
-    def render_loop(env, model, timesteps_per_render):
-        obs = env.reset()
-        done = False
-        while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, info = env.step(action)
-            env.render()
-            sync(i, START, render_env.TIMESTEP)
-    
-    render_env.reset()
-    obs = render_env.reset()
-    for i in range(0, total_timesteps, timesteps_per_render):
-        # Train the model for a chunk of timesteps
-        model.learn(total_timesteps=100, callback=eval_callback, log_interval=log_interval)
-
-        # Render the environment continuously without resetting
-        render_loop(render_env, model, timesteps_per_render)
+            # Render the environment continuously without resetting
+            render_loop(render_env, model, timesteps_per_render)
 
     #### Save the model ########################################
     model.save(filename+'/success_model.zip')
