@@ -145,7 +145,6 @@ class BaseRouting(object):
             self.STAT[0] = RouteStatus.GLOBAL
             self.SIM_MODE = 2
         elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
-            print("KUYYYYYYYYY")
             self.STAT[0] = RouteStatus.LOCAL
             self.SIM_MODE = 1
         else:
