@@ -135,17 +135,16 @@ class IFDSRoute(BaseRouting):
         # -------------------- Target Velocity Vector ----------------------
         curSpeed = np.linalg.norm(self.CUR_VEL)
         if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 1:
-            print("Reaching destination -> Stopping . . .")
+            # print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
             # acceleration = 0
         else:
-            if np.linalg.norm(self.CUR_POS - self.DESTINATION) < 4: # [m]
-                print("Approaching destination -> Decelerating . . .")
-                self._setCommand(SpeedCommandFlag, "accelerate", -0.02)  # [m/s^2]
+            # if np.linalg.norm(self.CUR_POS - self.DESTINATION) < 4: # [m]
+            #     print("Approaching destination -> Decelerating . . .")
+            #     self._setCommand(SpeedCommandFlag, "accelerate", -0.02)  # [m/s^2]
             
             if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
                 acceleration = self.COMMANDS[1]._value
-                # acceleration = self.COMMAND_SPEED._value
                 # self.TARGET_VEL = (curSpeed + acceleration*route_timestep*100) * path_vect_unit
                 self.TARGET_VEL = (curSpeed + acceleration*self.route_counter*0.01) * path_vect_unit
             
