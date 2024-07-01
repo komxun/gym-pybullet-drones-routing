@@ -79,8 +79,9 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         
         state = self._getDroneStateVector(0)
         norm_ep_time = (self.step_counter/self.SIM_FREQ) / self.EPISODE_LEN_SEC
+        
         if choice == 1:
-            reward = -1 * np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
+            reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
         else:
             raise NotImplementedError
             
