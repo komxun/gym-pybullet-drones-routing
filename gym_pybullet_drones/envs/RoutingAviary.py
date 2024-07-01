@@ -4,7 +4,7 @@ import pybullet as p
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics, BaseAviary
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 
-class RoutingAviary(CtrlAviary):
+class RoutingAviary(BaseAviary):
     """Single-drone environment class for routing application"""
     
     OBSTACLE_IDS = []
@@ -133,4 +133,133 @@ class RoutingAviary(CtrlAviary):
         self.obs_size = np.array(obs_size)  # matrix of size Nx3
         self.obs_pos = np.array(obs_pos)    # matrix of size Nx3
         
-        
+    ################################################################################
+
+    def _actionSpace(self):
+        """Returns the action space of the environment.
+
+        Returns
+        -------
+        dict[str, ndarray]
+            A Dict of Box(4,) with NUM_DRONES entries,
+            indexed by drone Id in string format.
+
+        """
+        #### Action vector ######## P0            P1            P2            P3
+        act_lower_bound = np.array([0.,           0.,           0.,           0.])
+        act_upper_bound = np.array([self.MAX_RPM, self.MAX_RPM, self.MAX_RPM, self.MAX_RPM])
+        return spaces.Dict({str(i): spaces.Box(low=act_lower_bound,
+                                               high=act_upper_bound,
+                                               dtype=np.float32
+                                               ) for i in range(self.NUM_DRONES)})
+    
+    ################################################################################
+
+    def _observationSpace(self):
+        """Returns the observation space of the environment.
+
+        Returns
+        -------
+        dict[str, dict[str, ndarray]]
+            A Dict with NUM_DRONES entries indexed by Id in string format,
+            each a Dict in the form {Box(20,), MultiBinary(NUM_DRONES)}.
+
+        """
+        #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       P0            P1            P2            P3
+        obs_lower_bound = np.array([-np.inf, -np.inf, 0.,     -1., -1., -1., -1., -np.pi, -np.pi, -np.pi, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, 0.,           0.,           0.,           0.])
+        obs_upper_bound = np.array([np.inf,  np.inf,  np.inf, 1.,  1.,  1.,  1.,  np.pi,  np.pi,  np.pi,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  self.MAX_RPM, self.MAX_RPM, self.MAX_RPM, self.MAX_RPM])
+        return spaces.Dict({str(i): spaces.Dict({"state": spaces.Box(low=obs_lower_bound,
+                                                                     high=obs_upper_bound,
+                                                                     dtype=np.float32
+                                                                     ),
+                                                 "neighbors": spaces.MultiBinary(self.NUM_DRONES)
+                                                 }) for i in range(self.NUM_DRONES)})
+
+    ################################################################################
+
+    def _computeObs(self):
+        """Returns the current observation of the environment.
+
+        For the value of key "state", see the implementation of `_getDroneStateVector()`,
+        the value of key "neighbors" is the drone's own row of the adjacency matrix.
+
+        Returns
+        -------
+        dict[str, dict[str, ndarray]]
+            A Dict with NUM_DRONES entries indexed by Id in string format,
+            each a Dict in the form {Box(20,), MultiBinary(NUM_DRONES)}.
+
+        """
+        adjacency_mat = self._getAdjacencyMatrix()
+        return {str(i): {"state": self._getDroneStateVector(i), "neighbors": adjacency_mat[i, :]} for i in range(self.NUM_DRONES)}
+
+    ################################################################################
+
+    def _preprocessAction(self,
+                          action
+                          ):
+        """Pre-processes the action passed to `.step()` into motors' RPMs.
+
+        Clips and converts a dictionary into a 2D array.
+
+        Parameters
+        ----------
+        action : dict[str, ndarray]
+            The (unbounded) input action for each drone, to be translated into feasible RPMs.
+
+        Returns
+        -------
+        ndarray
+            (NUM_DRONES, 4)-shaped array of ints containing to clipped RPMs
+            commanded to the 4 motors of each drone.
+
+        """
+        clipped_action = np.zeros((self.NUM_DRONES, 4))
+        for k, v in action.items():
+            clipped_action[int(k), :] = np.clip(np.array(v), 0, self.MAX_RPM)
+        return clipped_action
+
+    ################################################################################
+
+    def _computeReward(self):
+        """Computes the current reward value(s).
+
+        Unused as this subclass is not meant for reinforcement learning.
+
+        Returns
+        -------
+        int
+            Dummy value.
+
+        """
+        return -1
+
+    ################################################################################
+    
+    def _computeDone(self):
+        """Computes the current done value(s).
+
+        Unused as this subclass is not meant for reinforcement learning.
+
+        Returns
+        -------
+        bool
+            Dummy value.
+
+        """
+        return False
+
+    ################################################################################
+    
+    def _computeInfo(self):
+        """Computes the current info dict(s).
+
+        Unused as this subclass is not meant for reinforcement learning.
+
+        Returns
+        -------
+        dict[str, int]
+            Dummy value.
+
+        """
+        return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years    
