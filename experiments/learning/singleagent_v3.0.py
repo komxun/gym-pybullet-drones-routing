@@ -47,17 +47,18 @@ from stable_baselines3.td3 import MlpPolicy as td3ddpgMlpPolicy
 from stable_baselines3.td3 import CnnPolicy as td3ddpgCnnPolicy
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback, StopTrainingOnRewardThreshold
 
+from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.single_agent_rl.AutoroutingAviary import AutoroutingAviary
 from gym_pybullet_drones.envs.single_agent_rl.TakeoffAviary import TakeoffAviary
 from gym_pybullet_drones.envs.single_agent_rl.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGateAviary
 from gym_pybullet_drones.envs.single_agent_rl.TuneAviary import TuneAviary
-from gym_pybullet_drones.envs.single_agent_rl.ExtendedSingleAgentAviary import ActionType, ObservationType
+from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.utils.utils import sync
 
 import shared_constants
 
-EPISODE_REWARD_THRESHOLD = -0.01 # Upperbound: rewards are always negative, but non-zero
+EPISODE_REWARD_THRESHOLD = -0 # Upperbound: rewards are always negative, but non-zero
 """float: Reward threshold to halt the script."""
 
 # DEFAULT_ENV = 'hover'
@@ -265,23 +266,6 @@ def run(
                                     )
         eval_env = VecTransposeImage(eval_env)
     
-    #### Create a separate rendering environment (non-vectorized)
-    if env_name == "takeoff-aviary-v0": 
-        render_env = TakeoffAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-                                   obs=ARGS.obs, act=ARGS.act, gui=True)
-    if env_name == "hover-aviary-v0": 
-        render_env = HoverAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-                                 obs=ARGS.obs, act=ARGS.act, gui=True)
-    if env_name == "flythrugate-aviary-v0": 
-        render_env = FlyThruGateAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-                                       obs=ARGS.obs, act=ARGS.act, gui=True)
-    if env_name == "tune-aviary-v0": 
-        render_env = TuneAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-                                obs=ARGS.obs, act=ARGS.act, gui=True)
-    if env_name == "ca_static-aviary-v0":
-        render_env = AutoroutingAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-                                obs=obs, act=act, gui=True)
-    
     #### Train the model #######################################
     # checkpoint_callback = CheckpointCallback(save_freq=1000, save_path=filename+'-logs/', name_prefix='rl_model')
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=EPISODE_REWARD_THRESHOLD,
@@ -302,6 +286,23 @@ def run(
                     log_interval=100,
                     )
     else:
+        #### Create a separate rendering environment (non-vectorized)
+        if env_name == "takeoff-aviary-v0": 
+            render_env = TakeoffAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                       obs=ARGS.obs, act=ARGS.act, gui=True)
+        if env_name == "hover-aviary-v0": 
+            render_env = HoverAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                     obs=ARGS.obs, act=ARGS.act, gui=True)
+        if env_name == "flythrugate-aviary-v0": 
+            render_env = FlyThruGateAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                           obs=ARGS.obs, act=ARGS.act, gui=True)
+        if env_name == "tune-aviary-v0": 
+            render_env = TuneAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                    obs=ARGS.obs, act=ARGS.act, gui=True)
+        if env_name == "ca_static-aviary-v0":
+            render_env = AutoroutingAviary(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                                            act=act, gui=True)
+            
         ####### Train and render #####################################
         total_timesteps = 35000
         log_interval = 100
@@ -317,13 +318,14 @@ def run(
                 action, _ = model.predict(obs, deterministic=True)
                 obs, reward, done, info = env.step(action)
                 env.render()
-                # sync(i, START, render_env.TIMESTEP)
+                # sync(np.floor(i*env.AGGR_PHY_STEPS), START, env.TIMESTEP)
+                # sync(i, START, env.TIMESTEP)
         
         # render_env.reset()
         # obs = render_env.reset()
         for i in range(0, total_timesteps, timesteps_per_render):
             # Train the model for a chunk of timesteps
-            model.learn(total_timesteps=100, callback=eval_callback, log_interval=log_interval)
+            model.learn(total_timesteps=1, callback=eval_callback, log_interval=log_interval)
     
             # Render the environment continuously without resetting
             render_loop(render_env, model, timesteps_per_render)
