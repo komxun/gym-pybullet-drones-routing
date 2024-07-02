@@ -15,27 +15,28 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
+from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 
-class ActionType(Enum):
-    """Action type enumeration class."""
-    RPM = "rpm"                 # RPMS
-    DYN = "dyn"                 # Desired thrust and torques
-    PID = "pid"                 # PID control
-    VEL = "vel"                 # Velocity input (using PID control)
-    TUN = "tun"                 # Tune the coefficients of a PID controller
-    ONE_D_RPM = "one_d_rpm"     # 1D (identical input to all motors) with RPMs
-    ONE_D_DYN = "one_d_dyn"     # 1D (identical input to all motors) with desired thrust and torques
-    ONE_D_PID = "one_d_pid"     # 1D (identical input to all motors) with PID control
-    # New Action
-    AUTOROUTING = "autorouting"  # Route selection with speed adjustment
+# class ActionType(ActionType):
+#     """Action type enumeration class."""
+#     RPM = "rpm"                 # RPMS
+#     DYN = "dyn"                 # Desired thrust and torques
+#     PID = "pid"                 # PID control
+#     VEL = "vel"                 # Velocity input (using PID control)
+#     TUN = "tun"                 # Tune the coefficients of a PID controller
+#     ONE_D_RPM = "one_d_rpm"     # 1D (identical input to all motors) with RPMs
+#     ONE_D_DYN = "one_d_dyn"     # 1D (identical input to all motors) with desired thrust and torques
+#     ONE_D_PID = "one_d_pid"     # 1D (identical input to all motors) with PID control
+#     # New Action
+#     AUTOROUTING = "autorouting"  # Route selection with speed adjustment
     
 
 ################################################################################
 
-class ObservationType(Enum):
-    """Observation type enumeration class."""
-    KIN = "kin"     # Kinematic information (pose, linear and angular velocities)
-    RGB = "rgb"     # RGB camera capture in each drone's POV
+# class ObservationType(Enum):
+#     """Observation type enumeration class."""
+#     KIN = "kin"     # Kinematic information (pose, linear and angular velocities)
+#     RGB = "rgb"     # RGB camera capture in each drone's POV
 
 ################################################################################
 
@@ -91,7 +92,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
         # dynamics_attributes = True if act in [ActionType.DYN, ActionType.ONE_D_DYN] else False
         self.OBS_TYPE = obs
         self.ACT_TYPE = act
-        self.EPISODE_LEN_SEC = 60
+        self.EPISODE_LEN_SEC = 30
         #### Create integrated Controllers and Routers #########################
         if act in [ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -106,7 +107,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             
         super().__init__(drone_model=drone_model,
                          num_drones=1,
-                         initial_xyzs=initial_xyzs,
+                         # initial_xyzs=initial_xyzs,
+                         initial_xyzs=np.array([0,0,0.5]).reshape(1,3),
                          initial_rpys=initial_rpys,
                          physics=physics, 
                          freq=freq,
@@ -118,6 +120,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                          # vision_attributes=vision_attributes,
                          # dynamics_attributes=dynamics_attributes
                          )
+        
         #### Set a limit on the maximum target speed ###############
         if act == ActionType.VEL:
             self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000/3600)
@@ -175,6 +178,9 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             state = self._getDroneStateVector(0)
             
             if self.routing.route_counter == 0:
+                # Initially set to accelerate
+                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
+                action = 1
                 print("Calculating Global Route . . .")
                 #------- Compute route (waypoint) to follow ----------------
                 foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
@@ -210,12 +216,22 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                 raise ValueError(f"Invalid action: {action}")
                 
             #### Compute control for the current way point #############
-            rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
-                                                                   state=state,
-                                                                   target_pos = self.routing.TARGET_POS, 
-                                                                   target_rpy = state[7:10],
-                                                                   target_vel = self.routing.TARGET_VEL
-                                                                   )
+            # rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
+            #                                                        state=state,
+            #                                                        target_pos = self.routing.TARGET_POS, 
+            #                                                        target_rpy = state[7:10],
+            #                                                        target_vel = self.routing.TARGET_VEL
+            #                                                        )
+            
+            
+            rpm, _, _ = self.ctrl.computeControl(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP, 
+                                                 cur_pos=state[0:3],
+                                                 cur_quat=state[3:7],
+                                                 cur_vel=state[10:13],
+                                                 cur_ang_vel=state[13:16],
+                                                 target_pos=self.routing.TARGET_POS,
+                                                 target_vel=self.routing.TARGET_VEL
+                                                 )
             self.routing._updateCurPos(state[0:3])
             self.routing._updateCurVel(state[10:13])
             return rpm.astype(np.float32)  # Ensure rpm is returned as float32        

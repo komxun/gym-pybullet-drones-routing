@@ -28,12 +28,13 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, g=g)
 
+        # self.RHO0_IFDS = 6.5
         self.RHO0_IFDS = 6.5
-        self.SIGMA0_IFDS = 1
+        self.SIGMA0_IFDS = 1  # 1
         self.SF_IFDS = 0
         self.TARGET_THRESH = 0.5
         # self.SIM_MODE = 2
-        self.DT = 0.1  # 0.1
+        self.DT = 0.5  # 0.1
         self.TSIM = 50
         self.RTSIM = 200
         self.ACTIVATE_GLOBAL_PATH = 0
@@ -134,6 +135,7 @@ class IFDSRoute(BaseRouting):
     def _updateTargetVel(self, route_timestep, speed_limit, path_vect_unit):
         # -------------------- Target Velocity Vector ----------------------
         curSpeed = np.linalg.norm(self.CUR_VEL)
+        
         if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 1:
             # print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
@@ -152,10 +154,10 @@ class IFDSRoute(BaseRouting):
             
     def _processTargetVel(self, speed_limit):
         # Process target_vel
-        if np.linalg.norm(self.TARGET_VEL) <= 0.03:
-            # print("stopping")
-            # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
-            self._setCommand(SpeedCommandFlag, "hover")
+        # if np.linalg.norm(self.TARGET_VEL) <= 0.03:
+        #     print("stopping")
+        #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
+        #     self._setCommand(SpeedCommandFlag, "hover")
             
         if np.linalg.norm(self.TARGET_VEL) > speed_limit:
             # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
@@ -169,10 +171,11 @@ class IFDSRoute(BaseRouting):
         # -------------------- Target Position -----------------------------
         # -----------------Waypoint Skipping Logic--------------------------
         path_vect_unit = np.zeros(3)
-        k = 0
+        k = 1   # Initial waypoint number to follow
         while True:
             
             if k >= path.shape[1]-1:
+                # print("waypoint #" + str(k) + " exceeded path length")
                 break
             Wi = path[:,k]
             Wf = path[:,k+1]
@@ -183,15 +186,16 @@ class IFDSRoute(BaseRouting):
             b = path_vect[1]
             c = path_vect[2]
             
+            # wp_closeness_threshold = speed_limit/100  # [m]
             wp_closeness_threshold = speed_limit/100  # [m]
  
             # k[j] += 1
             
             # Check if the waypoing is ahead of current position
             if a*(self.CUR_POS[0] - Wf[0]) + b*(self.CUR_POS[1] - Wf[1]) + c*(self.CUR_POS[2]- Wf[2]) < 0:
-                self.TARGET_POS = Wi
+                self.TARGET_POS = Wf   # Wi or Wf??
                 # print("Agent " + str(j+1) + ": targeting WP #" + str(k[j]))
-                if np.linalg.norm(self.CUR_POS - path[:,k+1]) <= wp_closeness_threshold: 
+                if np.linalg.norm(self.CUR_POS.reshape(3,1) - Wf.reshape(3,1)) <= wp_closeness_threshold: 
                     k += 1
                 else:
                     break
@@ -269,7 +273,6 @@ class IFDSRoute(BaseRouting):
                 elif ntu >= 0 and self.SF_IFDS == 0:
                     M = np.identity(3)
                 else:
-                    print("AYOOOOOOOOO")
                     UBar = u
                     return UBar
         
@@ -313,7 +316,7 @@ class IFDSRoute(BaseRouting):
                 
             
             if np.linalg.norm(loc - target_pos) < self.TARGET_THRESH:
-                print("Path found at step #" + str(t))
+                # print("Path found at step #" + str(t))
                 wp = wp[:, :-1]
                 # Path[rt] = wp
                 foundPath = 1

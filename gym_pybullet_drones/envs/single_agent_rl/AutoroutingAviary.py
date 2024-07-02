@@ -12,57 +12,57 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
     
     ################################################################################
     
-    def __init__(self,
-                 drone_model: DroneModel=DroneModel.CF2X,
-                 initial_xyzs=np.array([0,0,0.5]).reshape(1,3),
-                 initial_rpys=None,
-                 physics: Physics=Physics.PYB,
-                 freq: int=240,
-                 aggregate_phy_steps: int=1,
-                 gui=False,
-                 record=False, 
-                 obs: ObservationType=ObservationType.KIN,
-                 act: ActionType=ActionType.RPM
-                 ):
-        """Initialization of a single agent RL environment.
+    # def __init__(self,
+    #              drone_model: DroneModel=DroneModel.CF2X,
+    #              initial_xyzs=np.array([0,0,0.5]).reshape(1,3),
+    #              initial_rpys=None,
+    #              physics: Physics=Physics.PYB,
+    #              freq: int=240,
+    #              aggregate_phy_steps: int=1,
+    #              gui=False,
+    #              record=False, 
+    #              obs: ObservationType=ObservationType.KIN,
+    #              act: ActionType=ActionType.RPM
+    #              ):
+    #     """Initialization of a single agent RL environment.
 
-        Using the generic single agent RL superclass.
+    #     Using the generic single agent RL superclass.
 
-        Parameters
-        ----------
-        drone_model : DroneModel, optional
-            The desired drone type (detailed in an .urdf file in folder `assets`).
-        initial_xyzs: ndarray | None, optional
-            (NUM_DRONES, 3)-shaped array containing the initial XYZ position of the drones.
-        initial_rpys: ndarray | None, optional
-            (NUM_DRONES, 3)-shaped array containing the initial orientations of the drones (in radians).
-        physics : Physics, optional
-            The desired implementation of PyBullet physics/custom dynamics.
-        freq : int, optional
-            The frequency (Hz) at which the physics engine steps.
-        aggregate_phy_steps : int, optional
-            The number of physics steps within one call to `BaseAviary.step()`.
-        gui : bool, optional
-            Whether to use PyBullet's GUI.
-        record : bool, optional
-            Whether to save a video of the simulation in folder `files/videos/`.
-        obs : ObservationType, optional
-            The type of observation space (kinematic information or vision)
-        act : ActionType, optional
-            The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
+    #     Parameters
+    #     ----------
+    #     drone_model : DroneModel, optional
+    #         The desired drone type (detailed in an .urdf file in folder `assets`).
+    #     initial_xyzs: ndarray | None, optional
+    #         (NUM_DRONES, 3)-shaped array containing the initial XYZ position of the drones.
+    #     initial_rpys: ndarray | None, optional
+    #         (NUM_DRONES, 3)-shaped array containing the initial orientations of the drones (in radians).
+    #     physics : Physics, optional
+    #         The desired implementation of PyBullet physics/custom dynamics.
+    #     freq : int, optional
+    #         The frequency (Hz) at which the physics engine steps.
+    #     aggregate_phy_steps : int, optional
+    #         The number of physics steps within one call to `BaseAviary.step()`.
+    #     gui : bool, optional
+    #         Whether to use PyBullet's GUI.
+    #     record : bool, optional
+    #         Whether to save a video of the simulation in folder `files/videos/`.
+    #     obs : ObservationType, optional
+    #         The type of observation space (kinematic information or vision)
+    #     act : ActionType, optional
+    #         The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
 
-        """
-        super().__init__(drone_model=drone_model,
-                         initial_xyzs=initial_xyzs,
-                         initial_rpys=initial_rpys,
-                         physics=physics,
-                         freq=freq,
-                         aggregate_phy_steps=aggregate_phy_steps,
-                         gui=gui,
-                         record=record,
-                         obs=obs,
-                         act=act
-                         )
+    #     """
+    #     super().__init__(drone_model=drone_model,
+    #                      initial_xyzs=initial_xyzs,
+    #                      initial_rpys=initial_rpys,
+    #                      physics=physics,
+    #                      freq=freq,
+    #                      aggregate_phy_steps=aggregate_phy_steps,
+    #                      gui=gui,
+    #                      record=record,
+    #                      obs=obs,
+    #                      act=act
+    #                      )
     
     def _computeReward(self):
         """Computes the current reward value.
@@ -73,15 +73,20 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
             The reward.
 
         """
-        
-        
-        choice = 1
+        choice = 2
         
         state = self._getDroneStateVector(0)
         norm_ep_time = (self.step_counter/self.SIM_FREQ) / self.EPISODE_LEN_SEC
         
         if choice == 1:
+            # Simple reward based on closeness to destination over time
             reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
+        elif choice == 2:
+            # Added penalty to collision
+            if self.CONTACT_FLAGS[0] == 1:
+                reward = -100
+            else:
+                reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
         else:
             raise NotImplementedError
             
@@ -99,13 +104,19 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
 
         """
         state = self._getDroneStateVector(0)
+        # cond1 : time exceeded limit
         cond1 = self.step_counter/self.SIM_FREQ > self.EPISODE_LEN_SEC
+        # cond2 : reached destination area
         cond2 = np.linalg.norm(np.array([0.2, 10, 1])-state[0:3]) <= 0.5
-        if cond1 or cond2:
-            if cond1:
-                print("########## Exit episode due to timeout ############")
-            elif cond2:
-                print("o=o=o=o= Exit episode due to destination reached o=o=o=o")
+        # cond3 : collided
+        cond3 = self.CONTACT_FLAGS[0] == 1
+        if cond1 or cond3:
+            # if cond1:
+            #     print("########## Exit episode due to timeout ############")
+            # elif cond2:
+            #     print("o=o=o Exit episode due to destination reached o=o=o")
+            # elif cond3:
+            #     print('!!!!!!!!! Exit episode due to collision !!!!!!!!!!!')
             return True
         else:
             return False

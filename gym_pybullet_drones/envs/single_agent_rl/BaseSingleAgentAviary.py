@@ -20,6 +20,9 @@ class ActionType(Enum):
     ONE_D_RPM = "one_d_rpm"     # 1D (identical input to all motors) with RPMs
     ONE_D_DYN = "one_d_dyn"     # 1D (identical input to all motors) with desired thrust and torques
     ONE_D_PID = "one_d_pid"     # 1D (identical input to all motors) with PID control
+    
+    # New Action
+    AUTOROUTING = "autorouting"  # Route selection with speed adjustment
 
 ################################################################################
 
@@ -181,6 +184,7 @@ class BaseSingleAgentAviary(BaseAviary):
         elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_DYN, ActionType.ONE_D_PID]:
             size = 1
         else:
+            print(self.ACT_TYPE)
             print("[ERROR] in BaseSingleAgentAviary._actionSpace()")
             exit()
         return spaces.Box(low=-1*np.ones(size),

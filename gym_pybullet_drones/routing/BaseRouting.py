@@ -90,7 +90,7 @@ class BaseRouting(object):
         self.CUR_POS = np.array([0,0,0])
         self.CUR_VEL = np.array([0,0,0])
         self.DESTINATION = np.array([0,0,0])
-        self.TARGET_POS   = np.array([0,0,0])   # Check-> initialize with empty array should work
+        self.TARGET_POS   = np.array([])   # Check-> initialize with empty array should work
         self.TARGET_VEL  =  np.array([0,0,0])
         self.HOME = np.array([0,0,0])
         self.STAT = [RouteStatus.GLOBAL, SpeedStatus.CONSTANT]
@@ -229,7 +229,7 @@ class BaseRouting(object):
             (3,N)-shaped array of floats containing the global route
         """
         self.GLOBAL_PATH = route
-        print("Setting a global route")
+        # print("Setting a global route")
     
     ################################################################################
     

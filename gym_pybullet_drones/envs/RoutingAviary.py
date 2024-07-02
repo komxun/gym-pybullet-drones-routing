@@ -20,10 +20,10 @@ class RoutingAviary(BaseAviary):
                  physics: Physics=Physics.PYB,
                  freq: int=240,
                  aggregate_phy_steps: int=1,
-                 gui=False,
+                 gui=True,
                  record=False,
-                 obstacles=False,
-                 user_debug_gui=True
+                 obstacles=True,
+                 user_debug_gui=False
                  ):
         """Initialization of an aviary environment for routing applications.
         
@@ -185,9 +185,8 @@ class RoutingAviary(BaseAviary):
             self.last_clipped_action = clipped_action
         #### Update and store the drones kinematic information #####
         self._updateAndStoreKinematicInformation()
-        
-        #### Detect collision for all agents
         self._detectCollision()
+        
   
         #### Prepare the return values #############################
         obs = self._computeObs()
@@ -219,6 +218,7 @@ class RoutingAviary(BaseAviary):
                    p.getQuaternionFromEuler([0, 0, 0]),
                    physicsClientId=self.CLIENT
                    ))
+        
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf",
                    [0, 2, .5],
@@ -226,30 +226,43 @@ class RoutingAviary(BaseAviary):
                    useFixedBase = True, 
                    physicsClientId=self.CLIENT
                    ))
+        
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf", 
-                   [0.8, 5, 0+1], 
-                   p.getQuaternionFromEuler([0,0,0]), 
-                   useFixedBase = True, 
-                   physicsClientId=self.CLIENT))
+                    [0.5, 3, 0.5], 
+                    p.getQuaternionFromEuler([0,0,0]), 
+                    useFixedBase = True, 
+                    physicsClientId=self.CLIENT))
+        
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf", 
-                   [0.5, 3, 0.5], 
-                   p.getQuaternionFromEuler([0,0,0]), 
-                   useFixedBase = True, 
-                   physicsClientId=self.CLIENT))
+                    [0.8, 5, 0+1], 
+                    p.getQuaternionFromEuler([0,0,0]), 
+                    useFixedBase = True, 
+                    physicsClientId=self.CLIENT))
+        
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf", 
-                   [0.8, 7, 0], 
-                   p.getQuaternionFromEuler([0,0,0]), 
-                   useFixedBase = True, 
-                   physicsClientId=self.CLIENT))
+                    [-0.2, 5, 0+1], 
+                    p.getQuaternionFromEuler([0,0,0]), 
+                    useFixedBase = True, 
+                    physicsClientId=self.CLIENT))
+        
+        RoutingAviary.OBSTACLE_IDS.append(
+            p.loadURDF("sphere2.urdf", 
+                    [0.8, 7, 0], 
+                    p.getQuaternionFromEuler([0,0,0]), 
+                    useFixedBase = True, 
+                    physicsClientId=self.CLIENT))        
+        
         # self._getObstaclesData()
     ################################################################################
     
     def _detectCollision(self):
-        for i in range(len(self.CONTACT_POINTS)):
+        # print("Processing Collision Detection . . .")
+        for i in range(self.NUM_DRONES):
             self.CONTACT_POINTS[i] = p.getContactPoints(self.DRONE_IDS[i])
+  
             if len(self.CONTACT_POINTS[i]) > 0:
                 self.CONTACT_FLAGS[i] = 1
                 print("Agent" + str(i) + ": Collided !!!!!!!!!!!!!!!")
@@ -265,6 +278,9 @@ class RoutingAviary(BaseAviary):
         obs_pos = []
         obs_size = []
         for j in range(len(idsList)):
+            if j>=2:
+                # Purposely not processing obstacle data
+                continue
             pos, orn = p.getBasePositionAndOrientation(idsList[j])
 
             obs_pos.append(pos)
