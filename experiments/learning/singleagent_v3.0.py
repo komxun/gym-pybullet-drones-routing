@@ -121,37 +121,42 @@ def run(
 
     env_name = env+"-aviary-v0"
     sa_env_kwargs = dict(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act)
-    # train_env = gym.make(env_name, aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act) # single environment instead of a vectorized one    
+    # train_env = gym.make(env_name, 
+    #                      aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+    #                      obs=obs, 
+    #                      act=act,
+    #                      gui=True) # single environment instead of a vectorized one    
+
     if env_name == "takeoff-aviary-v0":
         train_env = make_vec_env(TakeoffAviary,
-                                 env_kwargs=sa_env_kwargs,
-                                 n_envs=cpu,
-                                 seed=0
-                                 )
+                                  env_kwargs=sa_env_kwargs,
+                                  n_envs=cpu,
+                                  seed=0
+                                  )
     if env_name == "hover-aviary-v0":
         train_env = make_vec_env(HoverAviary,
-                                 env_kwargs=sa_env_kwargs,
-                                 n_envs=cpu,
-                                 seed=0,
-                                 )
+                                  env_kwargs=sa_env_kwargs,
+                                  n_envs=cpu,
+                                  seed=0,
+                                  )
     if env_name == "flythrugate-aviary-v0":
         train_env = make_vec_env(FlyThruGateAviary,
-                                 env_kwargs=sa_env_kwargs,
-                                 n_envs=cpu,
-                                 seed=0
-                                 )
+                                  env_kwargs=sa_env_kwargs,
+                                  n_envs=cpu,
+                                  seed=0
+                                  )
     if env_name == "tune-aviary-v0":
         train_env = make_vec_env(TuneAviary,
-                                 env_kwargs=sa_env_kwargs,
-                                 n_envs=cpu,
-                                 seed=0
-                                 )
+                                  env_kwargs=sa_env_kwargs,
+                                  n_envs=cpu,
+                                  seed=0
+                                  )
     if env_name == "ca_static-aviary-v0":
         train_env = make_vec_env(AutoroutingAviary,
-                                 env_kwargs=sa_env_kwargs,
-                                 n_envs=cpu,
-                                 seed=0
-                                 )
+                                  env_kwargs=sa_env_kwargs,
+                                  n_envs=cpu,
+                                  seed=0,
+                                  )
     print("[INFO] Action space:", train_env.action_space)
     print("[INFO] Observation space:", train_env.observation_space)
     # check_env(train_env, warn=True, skip_render_check=True)
@@ -160,6 +165,7 @@ def run(
     onpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
                            net_arch=[512, 512, dict(vf=[256, 128], pi=[256, 128])]
                            ) # or None
+    
     if algo == 'a2c':
         model = A2C(a2cppoMlpPolicy,
                     train_env,
@@ -231,8 +237,11 @@ def run(
         eval_env = gym.make(env_name,
                             aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
                             obs=obs,
-                            act=act
+                            act=act,
+                            # gui=True
                             )
+        # eval_env.render(mode="human")
+        
     elif obs == ObservationType.RGB:
         if env_name == "takeoff-aviary-v0": 
             eval_env = make_vec_env(TakeoffAviary,
