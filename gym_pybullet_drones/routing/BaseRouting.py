@@ -101,6 +101,7 @@ class BaseRouting(object):
         self.SIM_MODE = 2
         self._resetAllCommands()
         self.route_counter = 0
+        self.DETECTED_OBS_IDS = []
         self.reset()
 
     ################################################################################
@@ -239,7 +240,45 @@ class BaseRouting(object):
     def _updateCurVel(self, vel):
         self.CUR_VEL = vel
         
+    def _batchRayCast(self):
+        # rayFrom = self.CUR_POS
+        # p.removeAllUserDebugItems()
+        detected_obs_ids = []
+        rayTo = []
+        rayIds = []
+        # numRays = 1024
+        numRays = 250
+        rayLen = 1
+        rayHitColor = [1, 0, 0]
+        rayMissColor = [0, 1, 0]
+
+        replaceLines = True
+
+        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
+        indices = np.arange(0, numRays, dtype=float) + 0.5
+
+
+        phi = np.arccos(1 - 2*indices/numRays)
+        theta = np.pi * (1 + 5**0.5) * indices
+
+        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
+        rayFrom = [self.CUR_POS for _ in range(numRays)]
+        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
+        rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        results = p.rayTestBatch(rayFrom, rayTo)
+        
+        for i in range(numRays):
+            hitObjectUid = results[i][0]
+
+            if (hitObjectUid < 0):
+                hitPosition = [0, 0, 0]
+                p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+            else:
+                detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids else detected_obs_ids
+                hitPosition = results[i][3]
+                p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
     
+        self.DETECTED_OBS_IDS = detected_obs_ids
     ################################################################################
 
     def computeRouteFromState(self,
@@ -271,6 +310,7 @@ class BaseRouting(object):
         """
         self.HOME= home_pos
         self.DESTINATION = target_pos
+        
 
         return self.computeRoute(route_timestep=route_timestep,
                                    cur_pos=state[0:3],
@@ -320,6 +360,12 @@ class BaseRouting(object):
         raise NotImplementedError
 
     ################################################################################
+
+    def _plotRoute(self, path):
+        pathColor = [0, 0, 1]
+        
+        for i in range(0, path.shape[1]-1, 1):
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.5)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.

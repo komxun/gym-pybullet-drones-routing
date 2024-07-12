@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=5,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     H_STEP = .05
     R = .3
     # size: Nx3
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.2,-1*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.5,-1*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
     # INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.2,-1*(i*0.05), 0.05*i ] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
@@ -176,6 +176,7 @@ if __name__ == "__main__":
                                                       )
                 if foundPath>0:
                     routeCounter+=1
+                    # env._plotRoute(path)
 
                 if ctrlCounter == 1:
                     routing[j].setGlobalRoute(path)
@@ -195,18 +196,20 @@ if __name__ == "__main__":
                 # else:
                 #     flagHover[j] = 0
                 # ------------------------------------------------------------
-                # ---------- Manual logic to accelerate/decelerate ----------
-                if ctrlCounter >= 100 and ctrlCounter < 300:
-                    routing[j]._setCommand(SpeedCommandFlag, "accelerate", -0.06) # [m/s^2]
-                    routing[0]._setCommand(SpeedCommandFlag, "hover")
-                else:
-                    routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.01)
-                    
-                if ctrlCounter == 400 and j==1:
+                if ctrlCounter > 0:
                     routing[j]._setCommand(RouteCommandFlag, "follow_local")
+                # ---------- Manual logic to accelerate/decelerate ----------
+                # if ctrlCounter >= 100 and ctrlCounter < 300:
+                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", -0.06) # [m/s^2]
+                #     routing[0]._setCommand(SpeedCommandFlag, "hover")
+                # else:
+                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.01)
+                    
+                # if ctrlCounter == 400 and j==1:
+                #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
                                   
-                if ctrlCounter == 400 and j==2:
-                    routing[j]._setCommand(RouteCommandFlag, "change_route")
+                # if ctrlCounter == 400 and j==2:
+                #     routing[j]._setCommand(RouteCommandFlag, "change_route")
                 # ------------------------------------------------------------
                 
                 #### Compute control for the current way point #############

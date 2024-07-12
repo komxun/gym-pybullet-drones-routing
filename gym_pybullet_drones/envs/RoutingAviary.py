@@ -199,6 +199,11 @@ class RoutingAviary(BaseAviary):
     
     ################################################################################
     
+    # def _plotRoute(self, path):
+    #     pathColor = [0, 0, 1]
+    #     for i in range(path.shape[1]-1):
+    #         p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=2, lifeTime=0.5)
+    
     ################################################################################
         
     def _addObstacles(self):
@@ -278,9 +283,9 @@ class RoutingAviary(BaseAviary):
         obs_pos = []
         obs_size = []
         for j in range(len(idsList)):
-            if j>=2:
-                # Purposely not processing obstacle data
-                continue
+            # if j>=2:
+            #     # Purposely not processing obstacle data
+            #     continue
             pos, orn = p.getBasePositionAndOrientation(idsList[j])
 
             obs_pos.append(pos)
@@ -290,6 +295,9 @@ class RoutingAviary(BaseAviary):
         self.obs_size = np.array(obs_size)  # matrix of size Nx3
         self.obs_pos = np.array(obs_pos)    # matrix of size Nx3
         
+    ################################################################################
+    
+    
     ################################################################################
 
     def _actionSpace(self):

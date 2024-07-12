@@ -29,13 +29,13 @@ class IFDSRoute(BaseRouting):
         super().__init__(drone_model=drone_model, g=g)
 
         # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 6.5
-        self.SIGMA0_IFDS = 1  # 1
-        self.SF_IFDS = 0
+        self.RHO0_IFDS = 4.5
+        self.SIGMA0_IFDS = 0.1  # 1
+        self.SF_IFDS = 1
         self.TARGET_THRESH = 0.5
         # self.SIM_MODE = 2
         self.DT = 0.5  # 0.1
-        self.TSIM = 50
+        self.TSIM = 60
         self.RTSIM = 200
         self.ACTIVATE_GLOBAL_PATH = 0
         
@@ -105,6 +105,9 @@ class IFDSRoute(BaseRouting):
         foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacles_pos, obstacles_size)
         
         self._guidanceFromRoute(path, route_timestep, speed_limit)
+        
+        self._plotRoute(path)
+        self._batchRayCast()
         return foundPath, path
     ################################################################################
     
