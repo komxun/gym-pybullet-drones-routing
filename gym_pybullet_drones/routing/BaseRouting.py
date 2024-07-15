@@ -102,6 +102,7 @@ class BaseRouting(object):
         self._resetAllCommands()
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
+        self.DETECTED_OBS_DATA = {}
         self.reset()
 
     ################################################################################
@@ -241,14 +242,23 @@ class BaseRouting(object):
         self.CUR_VEL = vel
         
     def _batchRayCast(self):
+        """
+        Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
+        detected obstacle's id
+
+        Returns:
+            None.
+
+        """
         # rayFrom = self.CUR_POS
         # p.removeAllUserDebugItems()
         detected_obs_ids = []
         rayTo = []
         rayIds = []
         # numRays = 1024
+        # numRays = 500
         numRays = 250
-        rayLen = 1
+        rayLen = 1.5
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]
 
@@ -264,21 +274,51 @@ class BaseRouting(object):
         x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
         rayFrom = [self.CUR_POS for _ in range(numRays)]
         rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
-        rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
         results = p.rayTestBatch(rayFrom, rayTo)
         
         for i in range(numRays):
             hitObjectUid = results[i][0]
-
+            
             if (hitObjectUid < 0):
                 hitPosition = [0, 0, 0]
-                p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
             else:
-                detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids else detected_obs_ids
-                hitPosition = results[i][3]
-                p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                if hitObjectUid!=0:
+                    detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
+                    hitPosition = results[i][3]
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lifeTime=0.1)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
+
+    ################################################################################
+    
+    def _processDetection(self, obstacle_data):
+        """
+        Screen obstacle_data based on the detection from self.DETECTED_OBS_IDS. 
+
+        Args:
+            obstacle_data (dict): dictionary of dictionary of obstacles data where
+                key is the obstacle's id and values include 'position' and 'size'.
+
+        Returns:
+            None.
+
+        """
+        if len(self.DETECTED_OBS_IDS) != 0:
+            tempObs = []
+            for j in self.DETECTED_OBS_IDS:
+                self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
+                                                      "size": obstacle_data[str(j)]["size"]}
+                tempObs.append(obstacle_data[str(j)]["position"])
+        else:
+            self.DETECTED_OBS_DATA = {}
+            
+        
+        
+        
+
     ################################################################################
 
     def computeRouteFromState(self,
@@ -287,8 +327,7 @@ class BaseRouting(object):
                             home_pos,
                             target_pos,
                             speed_limit,
-                            obstacles_pos=None,
-                            obstacles_size=None,
+                            obstacle_data=None
                             ):
         """Interface method using `computeRoute`.
 
@@ -311,7 +350,9 @@ class BaseRouting(object):
         self.HOME= home_pos
         self.DESTINATION = target_pos
         
-
+        self._processDetection(obstacle_data)
+        
+        
         return self.computeRoute(route_timestep=route_timestep,
                                    cur_pos=state[0:3],
                                    cur_quat=state[3:7],
@@ -320,8 +361,7 @@ class BaseRouting(object):
                                    home_pos = np.array((0,0,0)),
                                    target_pos=target_pos,
                                    speed_limit = speed_limit,
-                                   obstacles_pos = obstacles_pos,
-                                   obstacles_size = obstacles_size
+                                   obstacle_data = self.DETECTED_OBS_DATA
                                    )
 
     ################################################################################
@@ -334,8 +374,8 @@ class BaseRouting(object):
                      cur_ang_vel,
                      home_pos,
                      target_pos,
-                     obstacles_pos=None,
-                     obstacles_size=None,
+                     speed_limit,
+                     obstacle_data=None
                      ):
         """Abstract method to compute the route for a single drone.
 
@@ -363,9 +403,8 @@ class BaseRouting(object):
 
     def _plotRoute(self, path):
         pathColor = [0, 0, 1]
-        
         for i in range(0, path.shape[1]-1, 1):
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.5)
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.

@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=5,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -74,9 +74,9 @@ if __name__ == "__main__":
     parser.add_argument('--user_debug_gui',     default=False,      type=str2bool,      help='Whether to add debug lines and parameters to the GUI (default: False)', metavar='')
     parser.add_argument('--aggregate',          default=True,       type=str2bool,      help='Whether to aggregate physics steps (default: True)', metavar='')
     parser.add_argument('--obstacles',          default=True,       type=str2bool,      help='Whether to add obstacles to the environment (default: True)', metavar='')
-    parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
+    parser.add_argument('--simulation_freq_hz', default=120,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
-    parser.add_argument('--duration_sec',       default=20,         type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
+    parser.add_argument('--duration_sec',       default=60,         type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     ARGS = parser.parse_args()
 
     #### Initialize the simulation #############################
@@ -171,8 +171,7 @@ if __name__ == "__main__":
                                                       home_pos = np.array((0,0,0)), 
                                                       target_pos = np.array((((-1)**j)*(j*0.2), 10, 1)),
                                                       speed_limit = env.SPEED_LIMIT,
-                                                      obstacles_pos = env.obs_pos,
-                                                      obstacles_size = env.obs_size,
+                                                      obstacle_data = env.OBSTACLE_DATA
                                                       )
                 if foundPath>0:
                     routeCounter+=1
@@ -196,8 +195,9 @@ if __name__ == "__main__":
                 # else:
                 #     flagHover[j] = 0
                 # ------------------------------------------------------------
-                if ctrlCounter > 0:
+                if ctrlCounter > 1:
                     routing[j]._setCommand(RouteCommandFlag, "follow_local")
+                
                 # ---------- Manual logic to accelerate/decelerate ----------
                 # if ctrlCounter >= 100 and ctrlCounter < 300:
                 #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", -0.06) # [m/s^2]

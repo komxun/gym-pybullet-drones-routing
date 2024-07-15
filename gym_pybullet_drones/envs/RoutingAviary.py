@@ -75,6 +75,7 @@ class RoutingAviary(BaseAviary):
         self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES)
         
         # # New ---------Get obstacle information
+        self.OBSTACLE_DATA = {}
         self._getObstaclesData()
     
     ################################################################################
@@ -194,6 +195,7 @@ class RoutingAviary(BaseAviary):
         done = self._computeDone()
         info = self._computeInfo()
         #### Advance the step counter ##############################
+        self._getObstaclesData()
         self.step_counter = self.step_counter + (1 * self.AGGR_PHY_STEPS)
         return obs, reward, done, info
     
@@ -250,7 +252,7 @@ class RoutingAviary(BaseAviary):
             p.loadURDF("sphere2.urdf", 
                     [-0.2, 5, 0+1], 
                     p.getQuaternionFromEuler([0,0,0]), 
-                    useFixedBase = True, 
+                    useFixedBase = False, 
                     physicsClientId=self.CLIENT))
         
         RoutingAviary.OBSTACLE_IDS.append(
@@ -258,7 +260,14 @@ class RoutingAviary(BaseAviary):
                     [0.8, 7, 0], 
                     p.getQuaternionFromEuler([0,0,0]), 
                     useFixedBase = True, 
-                    physicsClientId=self.CLIENT))        
+                    physicsClientId=self.CLIENT))    
+        
+        RoutingAviary.OBSTACLE_IDS.append(
+            p.loadURDF("sphere2.urdf", 
+                    [1, 4, 0], 
+                    p.getQuaternionFromEuler([0,0,0]), 
+                    useFixedBase = False, 
+                    physicsClientId=self.CLIENT))  
         
         # self._getObstaclesData()
     ################################################################################
@@ -280,20 +289,33 @@ class RoutingAviary(BaseAviary):
  
     def _getObstaclesData(self):
         idsList = RoutingAviary.OBSTACLE_IDS
-        obs_pos = []
-        obs_size = []
+        # idsList = list(self.DRONE_IDS) + idsList   # Include Drone's ids
+        
+        droneList = list(self.DRONE_IDS)
+
+        # Store obstacles data
         for j in range(len(idsList)):
             # if j>=2:
             #     # Purposely not processing obstacle data
             #     continue
             pos, orn = p.getBasePositionAndOrientation(idsList[j])
-
-            obs_pos.append(pos)
             vsd = p.getVisualShapeData(idsList[j])
-            obs_size.append(vsd[0][3])
+            self.OBSTACLE_DATA[str(idsList[j])] = {"position": pos,
+                                                   "size": vsd[0][3]}
+            
+        # Store drones data
+        for j in range(len(droneList)):
+            pos_drone, orn_drone = p.getBasePositionAndOrientation(droneList[j])
+            vsd_drone = p.getVisualShapeData(droneList[j])
+            
+            mod_vsd_drone = np.array(vsd_drone[0][3])/10
+            drone_size = tuple(mod_vsd_drone)
+            self.OBSTACLE_DATA[str(droneList[j])] = {"position": pos_drone,
+                                                   "size": drone_size}
+            
+            
+            
         
-        self.obs_size = np.array(obs_size)  # matrix of size Nx3
-        self.obs_pos = np.array(obs_pos)    # matrix of size Nx3
         
     ################################################################################
     

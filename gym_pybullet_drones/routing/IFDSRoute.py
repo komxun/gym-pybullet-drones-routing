@@ -29,11 +29,11 @@ class IFDSRoute(BaseRouting):
         super().__init__(drone_model=drone_model, g=g)
 
         # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 4.5
-        self.SIGMA0_IFDS = 0.1  # 1
-        self.SF_IFDS = 1
+        self.RHO0_IFDS = 6.5
+        self.SIGMA0_IFDS = 1  # 1
+        self.SF_IFDS = 0
         self.TARGET_THRESH = 0.5
-        # self.SIM_MODE = 2
+        self.SIM_MODE = 2
         self.DT = 0.5  # 0.1
         self.TSIM = 60
         self.RTSIM = 200
@@ -67,8 +67,7 @@ class IFDSRoute(BaseRouting):
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacles_pos=None,
-                     obstacles_size=None,
+                     obstacle_data=None
                      ):
         """Computes the IFDS path for a single drone.
 
@@ -102,7 +101,7 @@ class IFDSRoute(BaseRouting):
         vel = 0.3
  
         # Generate a route from the IFDS path-planning algorithm
-        foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacles_pos, obstacles_size)
+        foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacle_data)
         
         self._guidanceFromRoute(path, route_timestep, speed_limit)
         
@@ -216,8 +215,7 @@ class IFDSRoute(BaseRouting):
               v,
               home_pos,
               target_pos,
-              obstacles_pos=None,
-              obstacles_size=None,
+              obstacle_data=None
               ):
         """
         Generate 3D path using Interfered Fluid Dynamical System (IFDS) algorithm
@@ -230,6 +228,18 @@ class IFDSRoute(BaseRouting):
             Path (Array 3x_): A 3D path.
 
         """
+        
+        posList = []
+        sizeList = []
+        obstacles_pos = np.array([])
+        obstacles_size = np.array([])
+        if bool(obstacle_data):  # Boolean of empty dict return False
+            for j in self.DETECTED_OBS_IDS:
+                posList.append(obstacle_data[str(j)]["position"])
+                sizeList.append(obstacle_data[str(j)]["size"])
+            obstacles_pos = np.array(posList).reshape(len(self.DETECTED_OBS_IDS), 3)
+            obstacles_size = np.array(sizeList).reshape(len(self.DETECTED_OBS_IDS), 3)
+        
         def _CalcUBar(Obj):
             """
             Calculate modified velocity UBar for the IFDS algorithm
@@ -258,41 +268,48 @@ class IFDSRoute(BaseRouting):
             # Pre-allocation
             Mm = np.zeros((3,3))
             sum_w = 0;
-            for j in range(len(Obj)):
-                # Reading Gamma for each obstacle
-                Gamma = Obj[j]['Gamma']
-                # Unit normal and tangential vector
-                n = Obj[j]['n']
-                t = Obj[j]['t']
-                dist_obs = np.linalg.norm(loc - Obj[j]['origin'])
-                ntu = np.dot(np.transpose(n), u)
-                if ntu < 0 or self.SF_IFDS == 1:
-                    rho   = rho0   * math.exp(1 - 1/(dist_obs * dist))
-                    sigma = sigma0 * math.exp(1 - 1/(dist_obs * dist))
-                    n_t = np.transpose(n)
-                    M = np.identity(3) - np.dot(n,n_t)/(abs(Gamma)**(1/rho)*np.dot(n_t,n)) + \
-                        np.dot(t,n_t)/(abs(Gamma)**(1/sigma)*np.linalg.norm(t)*np.linalg.norm(n))
-                    
-                elif ntu >= 0 and self.SF_IFDS == 0:
-                    M = np.identity(3)
-                else:
-                    UBar = u
-                    return UBar
-        
-                # Calculate Weight
-                w = 1
-                if len(Obj) > 1:
-                    w = [w*(Obj[i]['Gamma'] - 1)/((Obj[j]['Gamma'] - 1) + (Obj[i]['Gamma']-1)) for i in range(len(Obj)) if i!=j][0]
-                # Saving into each obstacles
-                Obj[j]["w"] = w
-                Obj[j]["M"] = M
-                sum_w = sum_w + w
-            for j in range(len(Obj)):
-                w_tilde = Obj[j]["w"]/sum_w
-                Mm = Mm + w_tilde*Obj[j]["M"] 
-            
-            UBar = np.dot(Mm, u)
-            return UBar
+     
+            if len(Obj) != 0:
+                print("DETECTED " + str(len(Obj)) + " OBSTACLES!")
+                for j in range(len(Obj)):
+                    # Reading Gamma for each obstacle
+                    Gamma = Obj[j]['Gamma']
+                    # Unit normal and tangential vector
+                    n = Obj[j]['n']
+                    t = Obj[j]['t']
+                    dist_obs = np.linalg.norm(loc - Obj[j]['origin'])
+                    ntu = np.dot(np.transpose(n), u)
+                    if ntu < 0 or self.SF_IFDS == 1:
+                        rho   = rho0   * math.exp(1 - 1/(dist_obs * dist))
+                        sigma = sigma0 * math.exp(1 - 1/(dist_obs * dist))
+                        n_t = np.transpose(n)
+                        M = np.identity(3) - np.dot(n,n_t)/(abs(Gamma)**(1/rho)*np.dot(n_t,n)) + \
+                            np.dot(t,n_t)/(abs(Gamma)**(1/sigma)*np.linalg.norm(t)*np.linalg.norm(n))
+                        
+                    elif ntu >= 0 and self.SF_IFDS == 0:
+                        M = np.identity(3)
+                    else:
+                        print("error in _CalcUBar")
+                        # UBar = u
+                        
+                    # Calculate Weight
+                    w = 1
+                    if len(Obj) > 1:
+                        w = [w*(Obj[i]['Gamma'] - 1)/((Obj[j]['Gamma'] - 1) + (Obj[i]['Gamma']-1)) for i in range(len(Obj)) if i!=j][0]
+                    # Saving into each obstacles
+                    Obj[j]["w"] = w
+                    Obj[j]["M"] = M
+                    sum_w = sum_w + w
+                for j in range(len(Obj)):
+                    w_tilde = Obj[j]["w"]/sum_w
+                    Mm = Mm + w_tilde*Obj[j]["M"] 
+                
+                UBar = np.dot(Mm, u)
+                return UBar
+            else:
+                UBar = u
+                return UBar   
+        ############################################################    
 
         def _Loop(wp, t):
             flagBreak = 0
@@ -403,9 +420,9 @@ class IFDSRoute(BaseRouting):
             dType = "Dynamic" if isDynamic else "Static"
             Obj.append({'Gamma': Gamma, 'n': n, 't': t, 'origin': origin, 'type': dType})
         
-        numObj = len(obstacles_pos)
-        
-        for j in range(1,numObj):  # exclude the fist one (environment)   
+        numObj = obstacles_pos.shape[0]
+
+        for j in range(numObj):
             Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
     
         return Obj
