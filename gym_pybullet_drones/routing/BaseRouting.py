@@ -189,14 +189,20 @@ class BaseRouting(object):
     def switchRoute(self):
         """Switch current route from global to local, or from local to global"""
         if self.STAT[0].value == RouteStatus.GLOBAL.value:
-            # print("Switching to Local route")
-            self.STAT[0] = RouteStatus.LOCAL
-            self.SIM_MODE = 1
+            print("Switching to Local route")
+            # self.STAT[0] = RouteStatus.LOCAL
+            # self.SIM_MODE = 1
+            
+            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_LOCAL.value
+            self._processRouteCommand()
         
         elif self.STAT[0].value == RouteStatus.LOCAL.value:
-            # print("Switching to Global route")
-            self.STAT[0] = RouteStatus.GLOBAL
-            self.SIM_MODE =2
+            print("Switching to Global route")
+            # self.STAT[0] = RouteStatus.GLOBAL
+            # self.SIM_MODE =2
+            
+            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_GLOBAL.value
+            self._processRouteCommand()
              
         else:
             print("[Error] in switchRoute()")
@@ -256,8 +262,8 @@ class BaseRouting(object):
         rayTo = []
         rayIds = []
         # numRays = 1024
-        # numRays = 500
-        numRays = 250
+        numRays = 500
+        # numRays = 250
         rayLen = 1.5
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]

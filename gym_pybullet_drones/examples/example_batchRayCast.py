@@ -23,7 +23,7 @@ rayIds = []
 
 numRays = 1024
 
-rayLen = 13
+rayLen = 5
 
 rayHitColor = [1, 0, 0]
 rayMissColor = [0, 1, 0]

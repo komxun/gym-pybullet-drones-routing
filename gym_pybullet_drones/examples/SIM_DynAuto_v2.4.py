@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=5,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -165,6 +165,7 @@ if __name__ == "__main__":
             ctrlCounter+=1
             
             for j in range(ARGS.num_drones):
+             
                 #------- Compute route (waypoint) to follow ----------------
                 foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                       state = obs[str(j)]["state"], 
@@ -195,8 +196,13 @@ if __name__ == "__main__":
                 # else:
                 #     flagHover[j] = 0
                 # ------------------------------------------------------------
-                if ctrlCounter > 1:
-                    routing[j]._setCommand(RouteCommandFlag, "follow_local")
+                # if ctrlCounter > 200:
+                #     routing[j]._setCommand(RouteCommandFlag, "follow_global")
+                # elif ctrlCounter > 10:
+                #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
+                if ctrlCounter==80 or ctrlCounter==400:
+                    routing[j]._setCommand(RouteCommandFlag, "change_route")
+                    
                 
                 # ---------- Manual logic to accelerate/decelerate ----------
                 # if ctrlCounter >= 100 and ctrlCounter < 300:

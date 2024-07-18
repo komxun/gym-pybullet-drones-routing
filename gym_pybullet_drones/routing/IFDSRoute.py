@@ -33,7 +33,7 @@ class IFDSRoute(BaseRouting):
         self.SIGMA0_IFDS = 1  # 1
         self.SF_IFDS = 0
         self.TARGET_THRESH = 0.5
-        self.SIM_MODE = 2
+        # self.SIM_MODE = 2
         self.DT = 0.5  # 0.1
         self.TSIM = 60
         self.RTSIM = 200
@@ -270,7 +270,7 @@ class IFDSRoute(BaseRouting):
             sum_w = 0;
      
             if len(Obj) != 0:
-                print("DETECTED " + str(len(Obj)) + " OBSTACLES!")
+                # print("DETECTED " + str(len(Obj)) + " OBSTACLES!")
                 for j in range(len(Obj)):
                     # Reading Gamma for each obstacle
                     Gamma = Obj[j]['Gamma']
