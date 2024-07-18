@@ -76,6 +76,7 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         choice = 2
         
         state = self._getDroneStateVector(0)
+        state = np.array(state[0:3])
         norm_ep_time = (self.step_counter/self.SIM_FREQ) / self.EPISODE_LEN_SEC
         
         if choice == 1:
@@ -83,10 +84,11 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
             reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
         elif choice == 2:
             # Added penalty to collision
+            reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1]).reshape(1,3) - state.reshape(1,3))**2
             if self.CONTACT_FLAGS[0] == 1:
-                reward = -100
-            else:
-                reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 10, 1])-state[0:3])**2
+                print("Penalty due to collision")
+                reward -= 1e5
+            # print("Reward = " + str(reward))
         else:
             raise NotImplementedError
             

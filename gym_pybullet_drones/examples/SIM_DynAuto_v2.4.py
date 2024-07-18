@@ -200,8 +200,8 @@ if __name__ == "__main__":
                 #     routing[j]._setCommand(RouteCommandFlag, "follow_global")
                 # elif ctrlCounter > 10:
                 #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
-                if ctrlCounter==80 or ctrlCounter==400:
-                    routing[j]._setCommand(RouteCommandFlag, "change_route")
+                # if ctrlCounter==80 or ctrlCounter==400:
+                #     routing[j]._setCommand(RouteCommandFlag, "change_route")
                     
                 
                 # ---------- Manual logic to accelerate/decelerate ----------

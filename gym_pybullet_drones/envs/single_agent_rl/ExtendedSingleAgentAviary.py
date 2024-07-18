@@ -140,7 +140,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
 
         """
         if self.ACT_TYPE == ActionType.AUTOROUTING:
-            return spaces.Discrete(4)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
             # return spaces.Box(low=0, high=4, shape=(1,), dtype=np.float32)
         else:
             return super()._actionSpace()
@@ -177,26 +177,25 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             
             state = self._getDroneStateVector(0)
             
+            # Initially set to accelerate
+            # self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
+            # action = 1
+            
+            #------- Compute route (waypoint) to follow ----------------
+            foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
+                                                                 state = state, 
+                                                                 home_pos = np.array([0,0,1]), 
+                                                                 target_pos = np.array((0.2, 10, 1)),
+                                                                 speed_limit = self.SPEED_LIMIT,
+                                                                 obstacle_data = self.OBSTACLE_DATA
+                                                                 )
+        
             if self.routing.route_counter == 0:
-                # Initially set to accelerate
-                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
-                action = 1
-                print("Calculating Global Route . . .")
-                #------- Compute route (waypoint) to follow ----------------
-                foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
-                                                                     state = state, 
-                                                                     home_pos = np.array([0,0,1]), 
-                                                                     target_pos = np.array((0.2, 10, 1)),
-                                                                     speed_limit = self.SPEED_LIMIT,
-                                                                     obstacles_pos = self.obs_pos,
-                                                                     obstacles_size = self.obs_size,
-                                                                     )
                 if foundPath>0:
+                    print("Calculating Global Route . . .")
                     self.routing.setGlobalRoute(path)
                 else:
                     raise ValueError("[Error] Global route was not found. Mission aborted.")
-            else:
-                self.routing._updateTargetPosAndVel(self.routing.GLOBAL_PATH, self.routing.route_counter, self.SPEED_LIMIT)
     
             if action == 0:  # Constant Vel
                 self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
@@ -206,8 +205,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                 self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
             elif action == 3:  # Stop (Hover)
                 self.routing._setCommand(SpeedCommandFlag, "hover")
-            # elif action == 4:  # Change Route
-            #     self.routing._setCommand(RouteCommandFlag, "change_route")
+            elif action == 4:  # Change Route
+                self.routing._setCommand(RouteCommandFlag, "change_route")
             #     if self.routing.STAT:
             #         print("Alert: no route found!--> following global route")
             #         self.routing._setCommand(RouteCommandFlag, "follow_global")

@@ -37,7 +37,6 @@ class IFDSRoute(BaseRouting):
         self.DT = 0.5  # 0.1
         self.TSIM = 60
         self.RTSIM = 200
-        self.ACTIVATE_GLOBAL_PATH = 0
         
         self.reset()
 
@@ -102,7 +101,6 @@ class IFDSRoute(BaseRouting):
  
         # Generate a route from the IFDS path-planning algorithm
         foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacle_data)
-        
         self._guidanceFromRoute(path, route_timestep, speed_limit)
         
         self._plotRoute(path)
@@ -268,7 +266,7 @@ class IFDSRoute(BaseRouting):
             # Pre-allocation
             Mm = np.zeros((3,3))
             sum_w = 0;
-     
+            
             if len(Obj) != 0:
                 # print("DETECTED " + str(len(Obj)) + " OBSTACLES!")
                 for j in range(len(Obj)):
@@ -325,14 +323,9 @@ class IFDSRoute(BaseRouting):
             # Check if all obstacles is static
             envIsStatic = all([Obstacle[i]["type"] == "Static" for i in range(len(Obstacle))])
             
-            # Condition to use global path
+            # Manual Condition to use global path
             useGlobalRoute_manual = envIsStatic and route_timestep>1 and self.SIM_MODE==2
-            
-            if useGlobalRoute_manual or self.ACTIVATE_GLOBAL_PATH:
-                flagReturn = 1
-                flagBreak = 1
-                foundPath =2
-                return (flagReturn, flagBreak, foundPath, wp)
+
                 
             
             if np.linalg.norm(loc - target_pos) < self.TARGET_THRESH:

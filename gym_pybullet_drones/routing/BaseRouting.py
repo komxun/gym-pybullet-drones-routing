@@ -189,7 +189,7 @@ class BaseRouting(object):
     def switchRoute(self):
         """Switch current route from global to local, or from local to global"""
         if self.STAT[0].value == RouteStatus.GLOBAL.value:
-            print("Switching to Local route")
+            # print("Switching to Local route")
             # self.STAT[0] = RouteStatus.LOCAL
             # self.SIM_MODE = 1
             
@@ -197,7 +197,7 @@ class BaseRouting(object):
             self._processRouteCommand()
         
         elif self.STAT[0].value == RouteStatus.LOCAL.value:
-            print("Switching to Global route")
+            # print("Switching to Global route")
             # self.STAT[0] = RouteStatus.GLOBAL
             # self.SIM_MODE =2
             
