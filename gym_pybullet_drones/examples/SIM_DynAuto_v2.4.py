@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=2,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                 foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                       state = obs[str(j)]["state"], 
                                                       home_pos = np.array((0,0,0)), 
-                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 1)),
+                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 0.2)),
                                                       speed_limit = env.SPEED_LIMIT,
                                                       obstacle_data = env.OBSTACLE_DATA
                                                       )

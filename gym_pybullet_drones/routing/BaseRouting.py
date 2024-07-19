@@ -265,6 +265,7 @@ class BaseRouting(object):
         numRays = 500
         # numRays = 250
         rayLen = 1.5
+        # rayLen = 4
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]
 

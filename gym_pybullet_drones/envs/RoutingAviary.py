@@ -176,11 +176,17 @@ class RoutingAviary(BaseAviary):
                     self._groundEffect(clipped_action[i, :], i)
                     self._drag(self.last_clipped_action[i, :], i)
                     self._downwash(i)
+                    
+                      
+                    
+        
             #### PyBullet computes the new state, unless Physics.DYN ###
             #*** Added performCollisionDetection ***
             if self.PHYSICS != Physics.DYN:
+                self._applyForceToObstacle()  # Apply force to obstacle (dynamic obstacles) 
                 p.stepSimulation(physicsClientId=self.CLIENT)
                 p.performCollisionDetection(physicsClientId=self.CLIENT)
+                
                 
             #### Save the last applied action (e.g. to compute drag) ###
             self.last_clipped_action = clipped_action
@@ -214,25 +220,21 @@ class RoutingAviary(BaseAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        # RoutingAviary.OBSTACLE_IDS.append(
-        #                     p.loadURDF("samurai.urdf",
-        #                     physicsClientId=self.CLIENT
-        #                     ))
 
-        RoutingAviary.OBSTACLE_IDS.append(
-            p.loadURDF("cube_no_rotation.urdf",
-                   [-.5, -2.5, .5],
-                   p.getQuaternionFromEuler([0, 0, 0]),
-                   physicsClientId=self.CLIENT
-                   ))
+        # RoutingAviary.OBSTACLE_IDS.append(
+        #     p.loadURDF("cube_no_rotation.urdf",
+        #             [-.5, -2.5, .5],
+        #             p.getQuaternionFromEuler([0, 0, 0]),
+        #             physicsClientId=self.CLIENT
+        #             ))
         
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf",
-                   [0, 2, .5],
-                   p.getQuaternionFromEuler([0,0,0]),
-                   useFixedBase = True, 
-                   physicsClientId=self.CLIENT
-                   ))
+                    [0, 2, .5],
+                    p.getQuaternionFromEuler([0,0,0]),
+                    useFixedBase = False, 
+                    physicsClientId=self.CLIENT
+                    ))
         
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf", 
@@ -241,12 +243,12 @@ class RoutingAviary(BaseAviary):
                     useFixedBase = True, 
                     physicsClientId=self.CLIENT))
         
-        RoutingAviary.OBSTACLE_IDS.append(
-            p.loadURDF("sphere2.urdf", 
-                    [0.8, 5, 0+1], 
-                    p.getQuaternionFromEuler([0,0,0]), 
-                    useFixedBase = True, 
-                    physicsClientId=self.CLIENT))
+        # RoutingAviary.OBSTACLE_IDS.append(
+        #     p.loadURDF("sphere2.urdf", 
+        #             [0.8, 5, 0+1], 
+        #             p.getQuaternionFromEuler([0,0,0]), 
+        #             useFixedBase = True, 
+        #             physicsClientId=self.CLIENT))
         
         RoutingAviary.OBSTACLE_IDS.append(
             p.loadURDF("sphere2.urdf", 
@@ -267,7 +269,7 @@ class RoutingAviary(BaseAviary):
                     [1, 4, 0], 
                     p.getQuaternionFromEuler([0,0,0]), 
                     useFixedBase = False, 
-                    physicsClientId=self.CLIENT))  
+                    physicsClientId=self.CLIENT)) 
         
         # self._getObstaclesData()
     ################################################################################
@@ -318,7 +320,12 @@ class RoutingAviary(BaseAviary):
         
         
     ################################################################################
-    
+    def _applyForceToObstacle(self):
+        # Apply force to object -> dynamic obstacles
+        if len(self.OBSTACLE_IDS) != 0:
+            for j in self.OBSTACLE_IDS:
+                p.applyExternalForce(j, -1, [100*np.sin(self.step_counter/100),0,0], [0,0,0.5], flags=p.WORLD_FRAME) 
+                
     
     ################################################################################
 

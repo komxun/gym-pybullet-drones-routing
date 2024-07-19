@@ -16,6 +16,9 @@ p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
 
 #p.loadURDF("samurai.urdf")
 p.loadURDF("r2d2.urdf", [3, 3, 1])
+# p.loadURDF("bicycle/bike.urdf", [5, 0, 1])
+# p.loadURDF("teddy_large.urdf", [5, 0, 1])
+
 
 rayFrom = []
 rayTo = []

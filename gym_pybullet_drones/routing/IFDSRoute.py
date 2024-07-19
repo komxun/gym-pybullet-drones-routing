@@ -29,7 +29,7 @@ class IFDSRoute(BaseRouting):
         super().__init__(drone_model=drone_model, g=g)
 
         # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 6.5
+        self.RHO0_IFDS = 8.5
         self.SIGMA0_IFDS = 1  # 1
         self.SF_IFDS = 0
         self.TARGET_THRESH = 0.5
