@@ -324,7 +324,7 @@ class RoutingAviary(BaseAviary):
         # Apply force to object -> dynamic obstacles
         if len(self.OBSTACLE_IDS) != 0:
             for j in self.OBSTACLE_IDS:
-                p.applyExternalForce(j, -1, [100*np.sin(self.step_counter/100),0,0], [0,0,0.5], flags=p.WORLD_FRAME) 
+                p.applyExternalForce(j, -1, [100*np.sin(self.step_counter/100),0,0], [0,0,0], flags=p.LINK_FRAME)   
                 
     
     ################################################################################

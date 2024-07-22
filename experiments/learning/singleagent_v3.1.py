@@ -77,7 +77,7 @@ DEFAULT_CPU = 1
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
 
-komsunWantsRender = False
+komsunWantsRender = True
 
 def run(
     env=DEFAULT_ENV,

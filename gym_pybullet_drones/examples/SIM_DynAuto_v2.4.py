@@ -170,7 +170,7 @@ if __name__ == "__main__":
                 foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                       state = obs[str(j)]["state"], 
                                                       home_pos = np.array((0,0,0)), 
-                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 0.2)),
+                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 0.5)),
                                                       speed_limit = env.SPEED_LIMIT,
                                                       obstacle_data = env.OBSTACLE_DATA
                                                       )
