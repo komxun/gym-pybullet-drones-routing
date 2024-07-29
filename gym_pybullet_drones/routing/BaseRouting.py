@@ -93,7 +93,7 @@ class BaseRouting(object):
         self.DESTINATION = np.array([0,0,0])
         self.TARGET_POS   = np.array([])   # Check-> initialize with empty array should work
         self.TARGET_VEL  =  np.array([0,0,0])
-        self.HOME = np.array([0,0,0])
+        self.HOME_POS = np.array([0,0,0])
         self.STAT = [RouteStatus.GLOBAL, SpeedStatus.CONSTANT]
         # self.COMMAND = [RouteCommandFlag.NONE, SpeedCommandFlag.NONE]
         # self.COMMAND_ROUTE = Commander(RouteCommandFlag, "none")
@@ -355,7 +355,7 @@ class BaseRouting(object):
         obstacles_size : ndarray
             (N,3)-shaped array of floats containing obstacles' sizes. The first one is environment
         """
-        self.HOME= home_pos
+        self.HOME_POS= home_pos
         self.DESTINATION = target_pos
         
         self._processDetection(obstacle_data)
