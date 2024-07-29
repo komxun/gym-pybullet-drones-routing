@@ -1,5 +1,6 @@
 import os
 import math
+import time
 from enum import Enum
 import numpy as np
 import pybullet as p
@@ -359,7 +360,6 @@ class BaseRouting(object):
         
         self._processDetection(obstacle_data)
         
-        
         return self.computeRoute(route_timestep=route_timestep,
                                    cur_pos=state[0:3],
                                    cur_quat=state[3:7],
@@ -405,6 +405,14 @@ class BaseRouting(object):
 
         """
         raise NotImplementedError
+        
+        
+    ################################################################################
+    
+    def getDistanceToDestin(self):
+        cur_pos = self.CUR_POS.reshape(1,3)
+        destin = self.DESTINATION.reshape(1,3)
+        return np.linalg.norm(cur_pos - destin)
 
     ################################################################################
 
@@ -412,6 +420,7 @@ class BaseRouting(object):
         pathColor = [0, 0, 1]
         for i in range(0, path.shape[1]-1, 1):
             p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
+            
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
