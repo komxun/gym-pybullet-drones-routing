@@ -162,9 +162,10 @@ class IFDSRoute(BaseRouting):
         if np.linalg.norm(self.TARGET_VEL) > speed_limit:
             # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
             # self.TARGET_VEL = np.zeros(3)
-            # self.TARGET_VEL = np.clip(self.TARGET_VEL, 0, speed_limit)
-            print(": max speed limit reached -> Decelerating")
-            self._setCommand(SpeedCommandFlag, "accelerate", -0.06)
+            self.TARGET_VEL = np.clip(self.TARGET_VEL, 0, speed_limit)
+            print("Max speed reached: " + str(np.linalg.norm(self.TARGET_VEL)))
+            # print(": max speed limit reached -> Decelerating")
+            # self._setCommand(SpeedCommandFlag, "accelerate", -0.06)
             
     def _waypointSkipping(self, path, route_timestep, speed_limit):
         
