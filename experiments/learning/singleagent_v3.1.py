@@ -20,7 +20,8 @@ To check the tensorboard results at:
 
 """
 import sys
-sys.path.append('../../')
+# sys.path.append('../../')
+sys.path.append('C:\\Users\\s400263\\Documents\\gym-pybullet-drones-routing')
 import os
 import time
 from datetime import datetime
@@ -72,12 +73,13 @@ EPISODE_REWARD_THRESHOLD = -0 # Upperbound: rewards are always negative, but non
 DEFAULT_ENV = 'ca_static'
 DEFAULT_ALGO = 'a2c'
 DEFAULT_OBS = ObservationType('kin')
+# DEFAULT_OBS = ObservationType('rgb')
 DEFAULT_ACT = ActionType('autorouting')
 DEFAULT_CPU = 1
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
 
-komsunWantsRender = True
+komsunWantsRender = False
 
 def run(
     env=DEFAULT_ENV,
