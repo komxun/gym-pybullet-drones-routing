@@ -365,7 +365,7 @@ class BaseRouting(object):
                                    cur_quat=state[3:7],
                                    cur_vel=state[10:13],
                                    cur_ang_vel=state[13:16],
-                                   home_pos = np.array((0,0,0)),
+                                   home_pos = home_pos,
                                    target_pos=target_pos,
                                    speed_limit = speed_limit,
                                    obstacle_data = self.DETECTED_OBS_DATA
