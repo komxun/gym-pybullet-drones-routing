@@ -30,9 +30,9 @@ class IFDSRoute(BaseRouting):
 
         # self.RHO0_IFDS = 6.5
         self.RHO0_IFDS = 8.5
-        self.SIGMA0_IFDS = 1  # 1
+        self.SIGMA0_IFDS = 0.1  # 1
         self.SF_IFDS = 0
-        self.TARGET_THRESH = 0.5
+        self.TARGET_THRESH = 0.1
         # self.SIM_MODE = 2
         self.DT = 0.5  # 0.1
         self.TSIM = 60
@@ -259,7 +259,7 @@ class IFDSRoute(BaseRouting):
             (X, Y, Z) = loc
             (xd, yd, zd) = target_pos
             
-            dist = np.linalg.norm(loc - target_pos)
+            dist = np.linalg.norm(loc.reshape(3,1) - target_pos.reshape(3,1))
 
             u = -np.array([[v*(X - xd)/dist],
                            [v*(Y - yd)/dist],
@@ -276,7 +276,7 @@ class IFDSRoute(BaseRouting):
                     # Unit normal and tangential vector
                     n = Obj[j]['n']
                     t = Obj[j]['t']
-                    dist_obs = np.linalg.norm(loc - Obj[j]['origin'])
+                    dist_obs = np.linalg.norm(loc.reshape(3,1) - Obj[j]['origin'].reshape(3,1))
                     ntu = np.dot(np.transpose(n), u)
                     if ntu < 0 or self.SF_IFDS == 1:
                         rho   = rho0   * math.exp(1 - 1/(dist_obs * dist))
@@ -288,7 +288,8 @@ class IFDSRoute(BaseRouting):
                     elif ntu >= 0 and self.SF_IFDS == 0:
                         M = np.identity(3)
                     else:
-                        print("error in _CalcUBar")
+                        raise ValueError("[Error] in _CalcUBar in IFDSRoute")
+                        # print("error in _CalcUBar")
                         # UBar = u
                         
                     # Calculate Weight
@@ -417,7 +418,7 @@ class IFDSRoute(BaseRouting):
         numObj = obstacles_pos.shape[0]
 
         for j in range(numObj):
-            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
+            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
     
         return Obj
  
