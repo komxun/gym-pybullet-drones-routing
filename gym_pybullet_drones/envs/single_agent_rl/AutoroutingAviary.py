@@ -109,7 +109,7 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         # cond1 : time exceeded limit
         cond1 = self.step_counter/self.SIM_FREQ > self.EPISODE_LEN_SEC
         # cond2 : reached destination area
-        cond2 = np.linalg.norm(np.array([0.2, 10, 1])-state[0:3]) <= 0.5
+        cond2 = np.linalg.norm(self.routing.DESTINATION.reshape(3,1) - state[0:3].reshape(3,1)) <= 0.5
         # cond3 : collided
         cond3 = self.CONTACT_FLAGS[0] == 1
         if cond1 or cond3:
@@ -139,6 +139,19 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years
 
     ################################################################################
+    # def _normalizeDetection(self):
+    #     posList = []
+    #     sizeList = []
+    #     obstacles_pos = np.array([])
+    #     obstacles_size = np.array([])
+    #     if bool(obstacle_data):  # Boolean of empty dict return False
+    #         for j in self.DETECTED_OBS_IDS:
+    #             posList.append(obstacle_data[str(j)]["position"])
+    #             sizeList.append(obstacle_data[str(j)]["size"])
+    #         obstacles_pos = np.array(posList).reshape(len(self.DETECTED_OBS_IDS), 3)
+    #         obstacles_size = np.array(sizeList).reshape(len(self.DETECTED_OBS_IDS), 3)
+    
+    
     
     def _clipAndNormalizeState(self,
                                state
@@ -148,12 +161,12 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         Parameters
         ----------
         state : ndarray
-            (20,)-shaped array of floats containing the non-normalized state of a single drone.
+            (12,)-shaped array of floats containing the non-normalized state of a single drone.
 
         Returns
         -------
         ndarray
-            (20,)-shaped array of floats containing the normalized state of a single drone.
+            (13,)-shaped array of floats containing the normalized state of a single drone + normalized distance-to-destination.
 
         """
         MAX_LIN_VEL_XY = 3 
@@ -163,13 +176,18 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         MAX_Z = MAX_LIN_VEL_Z*self.EPISODE_LEN_SEC
 
         MAX_PITCH_ROLL = np.pi # Full range
-
+        MAX_RANGE = 2*np.linalg.norm(self.routing.HOME_POS.reshape(3,1) - self.routing.DESTINATION.reshape(3,1))
+        
+        # [X, Y, Z, R, P, Y, Vx, Vy, Vz, Wx, Wy, Wz, d2destin]
         clipped_pos_xy = np.clip(state[0:2], -MAX_XY, MAX_XY)
         clipped_pos_z = np.clip(state[2], 0, MAX_Z)
-        clipped_rp = np.clip(state[7:9], -MAX_PITCH_ROLL, MAX_PITCH_ROLL)
-        clipped_vel_xy = np.clip(state[10:12], -MAX_LIN_VEL_XY, MAX_LIN_VEL_XY)
-        clipped_vel_z = np.clip(state[12], -MAX_LIN_VEL_Z, MAX_LIN_VEL_Z)
-
+        clipped_rp = np.clip(state[3:5], -MAX_PITCH_ROLL, MAX_PITCH_ROLL)
+        clipped_vel_xy = np.clip(state[6:8], -MAX_LIN_VEL_XY, MAX_LIN_VEL_XY)
+        clipped_vel_z = np.clip(state[8], -MAX_LIN_VEL_Z, MAX_LIN_VEL_Z)
+        
+        d2destin = np.linalg.norm(state[0:3].reshape(3,1) - self.routing.DESTINATION.reshape(3,1))
+        clipped_d2destin = np.clip(d2destin, 0, MAX_RANGE)
+        
         if self.GUI:
             self._clipAndNormalizeStateWarning(state,
                                                clipped_pos_xy,
@@ -182,21 +200,23 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         normalized_pos_xy = clipped_pos_xy / MAX_XY
         normalized_pos_z = clipped_pos_z / MAX_Z
         normalized_rp = clipped_rp / MAX_PITCH_ROLL
-        normalized_y = state[9] / np.pi # No reason to clip
+        normalized_y = state[5] / np.pi     # No reason to clip
         normalized_vel_xy = clipped_vel_xy / MAX_LIN_VEL_XY
         normalized_vel_z = clipped_vel_z / MAX_LIN_VEL_XY
-        normalized_ang_vel = state[13:16]/np.linalg.norm(state[13:16]) if np.linalg.norm(state[13:16]) != 0 else state[13:16]
+        normalized_ang_vel  = state[9:12]/np.linalg.norm(state[9:12]) if np.linalg.norm(state[9:12]) != 0 else state[9:12]
+        
+        normalized_d2destin = clipped_d2destin/ MAX_RANGE
+        
 
         norm_and_clipped = np.hstack([normalized_pos_xy,
                                       normalized_pos_z,
-                                      state[3:7],
                                       normalized_rp,
                                       normalized_y,
                                       normalized_vel_xy,
                                       normalized_vel_z,
                                       normalized_ang_vel,
-                                      state[16:20]
-                                      ]).reshape(20,)
+                                      normalized_d2destin
+                                      ]).reshape(13,)
 
         return norm_and_clipped
     
