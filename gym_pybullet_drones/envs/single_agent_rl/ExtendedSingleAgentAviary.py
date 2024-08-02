@@ -88,6 +88,15 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, waypoint or velocity with PID control; etc.)
 
         """
+        
+        # =============================================================================
+        homePos =  np.array([0,0,0.5]) 
+        destin  =  np.array([0.2, 10, 1])
+        self.HOME_POS = homePos
+        self.DESTIN = destin
+        # =============================================================================
+        
+        
         # vision_attributes = True if obs == ObservationType.RGB else False
         # dynamics_attributes = True if act in [ActionType.DYN, ActionType.ONE_D_DYN] else False
         self.OBS_TYPE = obs
@@ -105,11 +114,14 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             else:
                 print("[ERROR] in ExtendedSingleAgentAviary.__init()__, no controller and router are available for the specified drone_model")
             
+            self.routing.HOME_POS = homePos
+            self.routing.DESTINATION = destin
+            
         super().__init__(drone_model=drone_model,
                          num_drones=1,
                          # initial_xyzs=initial_xyzs,
-                         initial_xyzs=np.array([0,0,0.5]).reshape(1,3),
-                         initial_rpys=initial_rpys,
+                         initial_xyzs = homePos.reshape(1,3),
+                         initial_rpys = initial_rpys,
                          physics=physics, 
                          freq=freq,
                          aggregate_phy_steps=aggregate_phy_steps,
@@ -184,8 +196,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             #------- Compute route (waypoint) to follow ----------------
             foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
                                                                  state = state, 
-                                                                 home_pos = np.array([0,0,1]), 
-                                                                 target_pos = np.array((0.2, 10, 1)),
+                                                                 home_pos = self.HOME_POS, 
+                                                                 target_pos = self.DESTIN,
                                                                  speed_limit = self.SPEED_LIMIT,
                                                                  obstacle_data = self.OBSTACLE_DATA
                                                                  )
@@ -238,6 +250,8 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             return super()._preprocessAction(action)
 
     ################################################################################
+    
+    ################################################################################
 
     def _observationSpace(self):
         """Returns the observation space of the environment.
@@ -256,20 +270,31 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                               )
         elif self.OBS_TYPE == ObservationType.KIN:
             ############################################################
+            
             #### OBS OF SIZE 20 (WITH QUATERNION AND RPMS)
-            #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       P0            P1            P2            P3
-            # obs_lower_bound = np.array([-1,      -1,      0,      -1,  -1,  -1,  -1,  -1,     -1,     -1,     -1,      -1,      -1,      -1,      -1,      -1,      -1,           -1,           -1,           -1])
-            # obs_upper_bound = np.array([1,       1,       1,      1,   1,   1,   1,   1,      1,      1,      1,       1,       1,       1,       1,       1,       1,            1,            1,            1])          
+            # Observations: [X Y Z Q1 Q2 Q3 Q4 R P Y Vx Vy Vz Wx Wy Wz P0 P1 P1 P3 relDist2Destin obj1_range obj1_bearing obj1_dH ...]
+            #### Observation vector ###    X   Y    Z   Q1   Q2   Q3   Q4    R    P    Y   VX   VY   VZ   WX    WY    WZ    P0    P1    P2    P3
+            # obs_lower_bound = np.array([-1,  -1,  0,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,   -1,   -1,   -1,   -1,   -1,   -1])
+            # obs_upper_bound = np.array([ 1,   1,  1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,    1,    1,    1,    1,    1,    1])          
             # return spaces.Box( low=obs_lower_bound, high=obs_upper_bound, dtype=np.float32 )
+            
             ############################################################
             #### OBS SPACE OF SIZE 12
-            return spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1]),
-                              high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1]),
+            # [X, Y, Z, R, P, Y, Vx, Vy, Vz, Wx, Wy, Wz]
+            # return spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1]),
+            #                   high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1]),
+            #                   dtype=np.float32
+            #                   )
+        
+            ############################################################
+            ##### NEW OBS SPACE OF SIZE 13
+            # [X, Y, Z, R, P, Y, Vx, Vy, Vz, Wx, Wy, Wz, D2Destin]
+            return spaces.Box(low=np.array([-1,-1,0, -1,-1,-1, -1,-1,-1, -1,-1,-1, 0]),
+                              high=np.array([1,1,1, 1,1,1, 1,1,1, 1,1,1, 1]),
                               dtype=np.float32
                               )
-            ############################################################
         else:
-            print("[ERROR] in BaseSingleAgentAviary._observationSpace()")
+            print("[ERROR] in ExtendedSingleAgentAviary._observationSpace()")
     
     ################################################################################
 
@@ -302,10 +327,28 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             # return obs
             ############################################################
             #### OBS SPACE OF SIZE 12
-            return np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
+            # return np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
+            ############################################################
+            #### OBS SPACE OF SIZE 13 (With D2Destin)
+            return obs.reshape(13,)
             ############################################################
         else:
             print("[ERROR] in BaseSingleAgentAviary._computeObs()")
+            
+   ################################################################################
+            
+    def _normalizeDetection(self):
+        """Normalizes a drone's state to the [-1,1] range.
+
+        Must be implemented in a subclass.
+
+        Parameters
+        ----------
+        state : ndarray
+            Array containing the non-normalized state of a single drone.
+
+        """
+        raise NotImplementedError
     
     ################################################################################
 
