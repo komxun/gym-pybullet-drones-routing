@@ -4,6 +4,7 @@ import time
 from enum import Enum
 import numpy as np
 import pybullet as p
+import xml.etree.ElementTree as etxml
 
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, BaseAviary
 
@@ -42,16 +43,6 @@ class BaseGuidance(object):
         self.KM = self._getURDFParameter('km')
         """float: The coefficient converting RPMs into torque."""
         
-        self.CUR_POS = np.array([0,0,0])
-        self.CUR_VEL = np.array([0,0,0])
-        self.DESTINATION = np.array([0,0,0])
-        self.TARGET_POS   = np.array([])   # Check-> initialize with empty array should work
-        self.TARGET_VEL  =  np.array([0,0,0])
-        self.HOME_POS = np.array([0,0,0])
-        
-        self.SIM_MODE = 2
-        self._resetAllCommands()
-        self.route_counter = 0
         self.reset()
         
     ################################################################################
@@ -65,8 +56,46 @@ class BaseGuidance(object):
         # self.route_counter = 0
 
     ################################################################################
-
+    
 
     ################################################################################
-    def followPath(self, path2follow):
-        pass
+    def followPath(self, path2follow, state, target_vel, speed_limit):
+        raise NotImplementedError
+
+    ################################################################################
+    
+    def _getURDFParameter(self,
+                          parameter_name: str
+                          ):
+        """Reads a parameter from a drone's URDF file.
+    
+        This method is nothing more than a custom XML parser for the .urdf
+        files in folder `assets/`.
+    
+        Parameters
+        ----------
+        parameter_name : str
+            The name of the parameter to read.
+    
+        Returns
+        -------
+        float
+            The value of the parameter.
+    
+        """
+        #### Get the XML tree of the drone model to control ########
+        URDF = self.DRONE_MODEL.value + ".urdf"
+        URDF_TREE = etxml.parse(os.path.dirname(os.path.abspath(__file__))+"/../assets/"+URDF).getroot()
+        #### Find and return the desired parameter #################
+        if parameter_name == 'm':
+            return float(URDF_TREE[1][0][1].attrib['value'])
+        elif parameter_name in ['ixx', 'iyy', 'izz']:
+            return float(URDF_TREE[1][0][2].attrib[parameter_name])
+        elif parameter_name in ['arm', 'thrust2weight', 'kf', 'km', 'max_speed_kmh', 'gnd_eff_coeff' 'prop_radius', \
+                                'drag_coeff_xy', 'drag_coeff_z', 'dw_coeff_1', 'dw_coeff_2', 'dw_coeff_3']:
+            return float(URDF_TREE[0].attrib[parameter_name])
+        elif parameter_name in ['length', 'radius']:
+            return float(URDF_TREE[1][2][1][0].attrib[parameter_name])
+        elif parameter_name == 'collision_z_offset':
+            COLLISION_SHAPE_OFFSETS = [float(s) for s in URDF_TREE[1][2][0].attrib['xyz'].split(' ')]
+            return COLLISION_SHAPE_OFFSETS[2]
