@@ -46,7 +46,7 @@ from gym_pybullet_drones.utils.utils import sync, str2bool
 
 from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
-
+from gym_pybullet_drones.guidance.CCA3DGuidance import CCA3DGuidance
 
 
 def adjust_target_vel(cur_vel, target_vel, max_acceleration):
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=2,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -138,6 +138,9 @@ if __name__ == "__main__":
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
     routing = [IFDSRoute(drone_model=ARGS.drone) for i in range(ARGS.num_drones)]
+    
+    #++++ Initialize Guidance +++++++++++++++++++++++++++++++++++
+    guidance  =[CCA3DGuidance(drone_model=ARGS.drone) for i in range(ARGS.num_drones)]
 
     #### Run the simulation ####################################
     CTRL_EVERY_N_STEPS = int(np.floor(env.SIM_FREQ/ARGS.control_freq_hz))
@@ -174,6 +177,7 @@ if __name__ == "__main__":
                                                       speed_limit = env.SPEED_LIMIT,
                                                       obstacle_data = env.OBSTACLE_DATA
                                                       )
+                
                 if foundPath>0:
                     routeCounter+=1
                     # env._plotRoute(path)
@@ -189,21 +193,7 @@ if __name__ == "__main__":
                             
                 
                 NUM_WP = path.shape[1]
-                
-                # ---------- Manual logic to activate hovering mode ----------
-                # if ctrlCounter >= 500 and ctrlCounter < 800:
-                #     flagHover[j] = 1
-                # else:
-                #     flagHover[j] = 0
-                # ------------------------------------------------------------
-                # if ctrlCounter > 200:
-                #     routing[j]._setCommand(RouteCommandFlag, "follow_global")
-                # elif ctrlCounter > 10:
-                #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
-                # if ctrlCounter==80 or ctrlCounter==400:
-                #     routing[j]._setCommand(RouteCommandFlag, "change_route")
-                    
-                
+   
                 # ---------- Manual logic to accelerate/decelerate ----------
                 # if ctrlCounter >= 100 and ctrlCounter < 300:
                 #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", -0.06) # [m/s^2]
@@ -218,11 +208,19 @@ if __name__ == "__main__":
                 #     routing[j]._setCommand(RouteCommandFlag, "change_route")
                 # ------------------------------------------------------------
                 
+                #### Compute Guidance from the generated route #############
+                state2follow = guidance[j].followPath(path = path, 
+                                                      state = obs[str(j)]["state"], 
+                                                      target_vel = routing[j].TARGET_VEL,
+                                                      speed_limit = env.SPEED_LIMIT)
+                
+                print(state2follow[3:]*180/np.pi)
+                
                 #### Compute control for the current way point #############
                 action[str(j)], _, _ = ctrl[j].computeControlFromState(control_timestep=CTRL_EVERY_N_STEPS*env.TIMESTEP,
                                                                        state=obs[str(j)]["state"],
-                                                                       target_pos = routing[j].TARGET_POS, 
-                                                                       target_rpy=INIT_RPYS[j, :],
+                                                                       target_pos = state2follow[0:3], 
+                                                                       target_rpy = state2follow[3:6],
                                                                        target_vel = routing[j].TARGET_VEL
                                                                        )
 
