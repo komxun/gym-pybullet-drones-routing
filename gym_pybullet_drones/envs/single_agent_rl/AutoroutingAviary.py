@@ -112,13 +112,13 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         cond2 = np.linalg.norm(self.routing.DESTINATION.reshape(3,1) - state[0:3].reshape(3,1)) <= 0.5
         # cond3 : collided
         cond3 = self.CONTACT_FLAGS[0] == 1
-        if cond1 or cond3:
-            # if cond1:
-            #     print("########## Exit episode due to timeout ############")
-            # elif cond2:
-            #     print("o=o=o Exit episode due to destination reached o=o=o")
-            # elif cond3:
-            #     print('!!!!!!!!! Exit episode due to collision !!!!!!!!!!!')
+        if cond1 or cond2 or cond3:
+            if cond1:
+                print("########## Exit episode due to timeout ############")
+            elif cond2:
+                print("o=o=o Exit episode due to destination reached o=o=o")
+            elif cond3:
+                print('!!!!!!!!! Exit episode due to collision !!!!!!!!!!!')
             return True
         else:
             return False
@@ -190,12 +190,12 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         
         if self.GUI:
             self._clipAndNormalizeStateWarning(state,
-                                               clipped_pos_xy,
-                                               clipped_pos_z,
-                                               clipped_rp,
-                                               clipped_vel_xy,
-                                               clipped_vel_z
-                                               )
+                                                clipped_pos_xy,
+                                                clipped_pos_z,
+                                                clipped_rp,
+                                                clipped_vel_xy,
+                                                clipped_vel_z
+                                                )
 
         normalized_pos_xy = clipped_pos_xy / MAX_XY
         normalized_pos_z = clipped_pos_z / MAX_Z
@@ -236,12 +236,12 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         
         """
         if not(clipped_pos_xy == np.array(state[0:2])).all():
-            print("[WARNING] it", self.step_counter, "in FlyThruGateAviary._clipAndNormalizeState(), clipped xy position [{:.2f} {:.2f}]".format(state[0], state[1]))
+            print("[WARNING] it", self.step_counter, "in AutoroutingAviary._clipAndNormalizeState(), clipped xy position [{:.2f} {:.2f}]".format(state[0], state[1]))
         if not(clipped_pos_z == np.array(state[2])).all():
-            print("[WARNING] it", self.step_counter, "in FlyThruGateAviary._clipAndNormalizeState(), clipped z position [{:.2f}]".format(state[2]))
+            print("[WARNING] it", self.step_counter, "in AutoroutingAviary._clipAndNormalizeState(), clipped z position [{:.2f}]".format(state[2]))
         if not(clipped_rp == np.array(state[7:9])).all():
-            print("[WARNING] it", self.step_counter, "in FlyThruGateAviary._clipAndNormalizeState(), clipped roll/pitch [{:.2f} {:.2f}]".format(state[7], state[8]))
+            print("[WARNING] it", self.step_counter, "in AutoroutingAviary._clipAndNormalizeState(), clipped roll/pitch [{:.2f} {:.2f}]".format(state[7], state[8]))
         if not(clipped_vel_xy == np.array(state[10:12])).all():
-            print("[WARNING] it", self.step_counter, "in FlyThruGateAviary._clipAndNormalizeState(), clipped xy velocity [{:.2f} {:.2f}]".format(state[10], state[11]))
+            print("[WARNING] it", self.step_counter, "in AutoroutingAviary._clipAndNormalizeState(), clipped xy velocity [{:.2f} {:.2f}]".format(state[10], state[11]))
         if not(clipped_vel_z == np.array(state[12])).all():
-            print("[WARNING] it", self.step_counter, "in FlyThruGateAviary._clipAndNormalizeState(), clipped z velocity [{:.2f}]".format(state[12]))
+            print("[WARNING] it", self.step_counter, "in AutoroutingAviary._clipAndNormalizeState(), clipped z velocity [{:.2f}]".format(state[12]))
