@@ -15,6 +15,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
+from gym_pybullet_drones.guidance.CCA3DGuidance import CCA3DGuidance
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 
 # class ActionType(ActionType):
@@ -106,11 +107,13 @@ class ExtendedSingleAgentAviary(RoutingAviary):
         if act in [ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
             if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
-                self.ctrl = DSLPIDControl(drone_model=DroneModel.CF2X)
-                self.routing = IFDSRoute(drone_model=DroneModel.CF2X)
+                self.ctrl = DSLPIDControl(drone_model)
+                self.routing = IFDSRoute(drone_model)
+                self.guidance = CCA3DGuidance(drone_model)
             elif drone_model == DroneModel.HB:
                 self.ctrl = SimplePIDControl(drone_model=DroneModel.HB)
                 self.routing = IFDSRoute(drone_model=DroneModel.HB)
+                self.guidance = CCA3DGuidance(drone_model=DroneModel.HB)
             else:
                 print("[ERROR] in ExtendedSingleAgentAviary.__init()__, no controller and router are available for the specified drone_model")
             
@@ -235,14 +238,22 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             #                                                        )
             
             
+            state2follow = self.guidance.followPath(path = path, 
+                                                    state = state, 
+                                                    target_vel = self.routing.TARGET_VEL,
+                                                    speed_limit = self.SPEED_LIMIT)
+            
+            
             rpm, _, _ = self.ctrl.computeControl(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP, 
                                                  cur_pos=state[0:3],
                                                  cur_quat=state[3:7],
                                                  cur_vel=state[10:13],
                                                  cur_ang_vel=state[13:16],
                                                  target_pos=self.routing.TARGET_POS,
+                                                 target_rpy=state2follow[3:6],
                                                  target_vel=self.routing.TARGET_VEL
                                                  )
+            
             self.routing._updateCurPos(state[0:3])
             self.routing._updateCurVel(state[10:13])
             return rpm.astype(np.float32)  # Ensure rpm is returned as float32        
