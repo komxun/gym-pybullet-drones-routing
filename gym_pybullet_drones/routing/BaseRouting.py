@@ -248,7 +248,7 @@ class BaseRouting(object):
     def _updateCurVel(self, vel):
         self.CUR_VEL = vel
         
-    def _batchRayCast(self):
+    def _batchRayCast(self, drone_ids):
         """
         Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
         detected obstacle's id
@@ -292,11 +292,13 @@ class BaseRouting(object):
                 hitPosition = [0, 0, 0]
                 # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
             else:
-                if hitObjectUid!=0:
+                # This case, no detection of other fellow UAVs
+                if hitObjectUid!=0 and hitObjectUid not in drone_ids:
+                # if hitObjectUid!=0:
                     detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
                     hitPosition = results[i][3]
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lifeTime=0.1)
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2,lifeTime=0.01)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
 
@@ -335,7 +337,8 @@ class BaseRouting(object):
                             home_pos,
                             target_pos,
                             speed_limit,
-                            obstacle_data=None
+                            obstacle_data=None,
+                            drone_ids=np.array([1])
                             ):
         """Interface method using `computeRoute`.
 
@@ -368,7 +371,8 @@ class BaseRouting(object):
                                    home_pos = home_pos,
                                    target_pos=target_pos,
                                    speed_limit = speed_limit,
-                                   obstacle_data = self.DETECTED_OBS_DATA
+                                   obstacle_data = self.DETECTED_OBS_DATA,
+                                   drone_ids=drone_ids
                                    )
 
     ################################################################################
@@ -382,7 +386,8 @@ class BaseRouting(object):
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacle_data=None
+                     obstacle_data,
+                     drone_ids
                      ):
         """Abstract method to compute the route for a single drone.
 
