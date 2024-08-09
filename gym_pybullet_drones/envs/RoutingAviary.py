@@ -299,15 +299,15 @@ class RoutingAviary(BaseAviary):
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
+            # RoutingAviary.OBSTACLE_IDS.append(
+            #     p.loadURDF("cube.urdf", 
+            #             [2, 8.5, 1.5], 
+            #             p.getQuaternionFromEuler([0,0,0]), 
+            #             useFixedBase = True, 
+            #             physicsClientId=self.CLIENT)) 
             RoutingAviary.OBSTACLE_IDS.append(
                 p.loadURDF("cube.urdf", 
-                        [2, 8.5, 1.5], 
-                        p.getQuaternionFromEuler([0,0,0]), 
-                        useFixedBase = True, 
-                        physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
-                p.loadURDF("cube.urdf", 
-                        [2, 8.5, 0.5], 
+                        [2, 8.5, 0.25], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
