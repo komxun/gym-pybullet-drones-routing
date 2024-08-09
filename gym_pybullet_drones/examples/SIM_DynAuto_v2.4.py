@@ -64,8 +64,8 @@ if __name__ == "__main__":
 
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
-    parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=1,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--drone',              default="cf2x",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
+    parser.add_argument('--num_drones',         default=10,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     H_STEP = .05
     R = .3
     # size: Nx3
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.5,-1*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-1*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
     # INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.2,-1*(i*0.05), 0.05*i ] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
@@ -169,21 +169,7 @@ if __name__ == "__main__":
             
             for j in range(ARGS.num_drones):
              
-                #------- Compute route (waypoint) to follow ----------------
-                foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
-                                                      state = obs[str(j)]["state"], 
-                                                      home_pos = np.array((0,0,0)), 
-                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 0.5)),
-                                                      speed_limit = env.SPEED_LIMIT,
-                                                      obstacle_data = env.OBSTACLE_DATA
-                                                      )
                 
-                if foundPath>0:
-                    routeCounter+=1
-                    # env._plotRoute(path)
-
-                if ctrlCounter == 1:
-                    routing[j].setGlobalRoute(path)
                 # elif ctrlCounter == 100:
                 #     print("ALERT*****Switching to Local Path********")
                 #     routing[j].SIM_MODE = 2
@@ -191,8 +177,6 @@ if __name__ == "__main__":
                 #     print("ALERT======Switching to GLOBAL PATH=======")
                 #     routing[j].ACTIVATE_GLOBAL_PATH = 1
                             
-                
-                NUM_WP = path.shape[1]
    
                 # ---------- Manual logic to accelerate/decelerate ----------
                 # if ctrlCounter >= 100 and ctrlCounter < 300:
@@ -209,17 +193,36 @@ if __name__ == "__main__":
                 # ------------------------------------------------------------
                 
                 #### Compute Guidance from the generated route #############
+                if ctrlCounter %1 == 0 or ctrlCounter == 1:
+                    
+                    #------- Compute route (waypoint) to follow ----------------
+                    foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
+                                                          state = obs[str(j)]["state"], 
+                                                          home_pos = np.array((0,0,0)), 
+                                                          target_pos = np.array((((-1)**j)*(j*0.2), 12, 1)),
+                                                          speed_limit = env.SPEED_LIMIT,
+                                                          obstacle_data = env.OBSTACLE_DATA,
+                                                          drone_ids = env.DRONE_IDS
+                                                          )
+                    
+                    if foundPath>0:
+                        routeCounter+=1
+                        # env._plotRoute(path)
+
+                    if ctrlCounter == 1:
+                        routing[j].setGlobalRoute(path)
+                        routing[j].ACTIVATE_GLOBAL_PATH = 1
+                        
+                        
                 state2follow = guidance[j].followPath(path = path, 
-                                                      state = obs[str(j)]["state"], 
-                                                      target_vel = routing[j].TARGET_VEL,
-                                                      speed_limit = env.SPEED_LIMIT)
-                
-                print(state2follow[3:]*180/np.pi)
+                                                  state = obs[str(j)]["state"], 
+                                                  target_vel = routing[j].TARGET_VEL,
+                                                  speed_limit = env.SPEED_LIMIT)
                 
                 #### Compute control for the current way point #############
                 action[str(j)], _, _ = ctrl[j].computeControlFromState(control_timestep=CTRL_EVERY_N_STEPS*env.TIMESTEP,
                                                                        state=obs[str(j)]["state"],
-                                                                       target_pos = state2follow[0:3], 
+                                                                       target_pos = routing[j].TARGET_POS, 
                                                                        target_rpy = state2follow[3:6],
                                                                        target_vel = routing[j].TARGET_VEL
                                                                        )
