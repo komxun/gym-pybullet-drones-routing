@@ -74,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument('--user_debug_gui',     default=False,      type=str2bool,      help='Whether to add debug lines and parameters to the GUI (default: False)', metavar='')
     parser.add_argument('--aggregate',          default=True,       type=str2bool,      help='Whether to aggregate physics steps (default: True)', metavar='')
     parser.add_argument('--obstacles',          default=True,       type=str2bool,      help='Whether to add obstacles to the environment (default: True)', metavar='')
-    parser.add_argument('--simulation_freq_hz', default=120,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
+    parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
     parser.add_argument('--control_freq_hz',    default=48,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
     parser.add_argument('--duration_sec',       default=60,         type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     ARGS = parser.parse_args()
