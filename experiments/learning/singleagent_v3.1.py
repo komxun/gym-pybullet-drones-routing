@@ -79,7 +79,7 @@ DEFAULT_CPU = 1
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
 
-komsunWantsRender = False
+komsunWantsRender = 1
 
 def run(
     env=DEFAULT_ENV,
@@ -127,42 +127,42 @@ def run(
     else:
         sa_env_kwargs = dict(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act)
         
-    # train_env = gym.make(env_name, 
-    #                      aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-    #                      obs=obs, 
-    #                      act=act,
-    #                      gui=True) # single environment instead of a vectorized one    
+    train_env = gym.make(env_name, 
+                          aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+                          obs=obs, 
+                          act=act,
+                          gui=True) # single environment instead of a vectorized one    
 
-    if env_name == "takeoff-aviary-v0":
-        train_env = make_vec_env(TakeoffAviary,
-                                  env_kwargs=sa_env_kwargs,
-                                  n_envs=cpu,
-                                  seed=0
-                                  )
-    if env_name == "hover-aviary-v0":
-        train_env = make_vec_env(HoverAviary,
-                                  env_kwargs=sa_env_kwargs,
-                                  n_envs=cpu,
-                                  seed=0,
-                                  )
-    if env_name == "flythrugate-aviary-v0":
-        train_env = make_vec_env(FlyThruGateAviary,
-                                  env_kwargs=sa_env_kwargs,
-                                  n_envs=cpu,
-                                  seed=0
-                                  )
-    if env_name == "tune-aviary-v0":
-        train_env = make_vec_env(TuneAviary,
-                                  env_kwargs=sa_env_kwargs,
-                                  n_envs=cpu,
-                                  seed=0
-                                  )
-    if env_name == "ca_static-aviary-v0":
-        train_env = make_vec_env(AutoroutingAviary,
-                                  env_kwargs=sa_env_kwargs,
-                                  n_envs=cpu,
-                                  seed=0,
-                                  )
+    # if env_name == "takeoff-aviary-v0":
+    #     train_env = make_vec_env(TakeoffAviary,
+    #                               env_kwargs=sa_env_kwargs,
+    #                               n_envs=cpu,
+    #                               seed=0
+    #                               )
+    # if env_name == "hover-aviary-v0":
+    #     train_env = make_vec_env(HoverAviary,
+    #                               env_kwargs=sa_env_kwargs,
+    #                               n_envs=cpu,
+    #                               seed=0,
+    #                               )
+    # if env_name == "flythrugate-aviary-v0":
+    #     train_env = make_vec_env(FlyThruGateAviary,
+    #                               env_kwargs=sa_env_kwargs,
+    #                               n_envs=cpu,
+    #                               seed=0
+    #                               )
+    # if env_name == "tune-aviary-v0":
+    #     train_env = make_vec_env(TuneAviary,
+    #                               env_kwargs=sa_env_kwargs,
+    #                               n_envs=cpu,
+    #                               seed=0
+    #                               )
+    # if env_name == "ca_static-aviary-v0":
+    #     train_env = make_vec_env(AutoroutingAviary,
+    #                               env_kwargs=sa_env_kwargs,
+    #                               n_envs=cpu,
+    #                               seed=0,
+    #                               )
     print("[INFO] Action space:", train_env.action_space)
     print("[INFO] Observation space:", train_env.observation_space)
     # check_env(train_env, warn=True, skip_render_check=True)
@@ -292,7 +292,7 @@ def run(
                                  log_path=filename+'/',
                                  eval_freq=int(2000/cpu),
                                  deterministic=True,
-                                 render=False
+                                 render=True
                                  )
     
     model.learn(total_timesteps=steps, #int(1e12),
