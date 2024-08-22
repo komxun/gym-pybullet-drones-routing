@@ -28,14 +28,17 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, g=g)
 
-        # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 8.5
-        self.SIGMA0_IFDS = 0.1  # 1
+     
+        self.RHO0_IFDS = 2.5
+        self.SIGMA0_IFDS = 1  # 1
+        
+        # self.RHO0_IFDS = 2.5
+        # self.SIGMA0_IFDS = 0.01  # 1
         self.SF_IFDS = 0
         self.TARGET_THRESH = 0.1
-        # self.SIM_MODE = 2
+        self.SIM_MODE = 2
         self.DT = 0.5  # 0.1
-        self.TSIM = 60
+        self.TSIM = 10
         self.RTSIM = 200
         
         self.reset()
@@ -66,7 +69,8 @@ class IFDSRoute(BaseRouting):
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacle_data=None
+                     obstacle_data,
+                     drone_ids
                      ):
         """Computes the IFDS path for a single drone.
 
@@ -98,13 +102,14 @@ class IFDSRoute(BaseRouting):
  
         # vel = np.linalg.norm(cur_vel)
         vel = 0.3
+        # vel = 30
  
         # Generate a route from the IFDS path-planning algorithm
         foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacle_data)
         self._guidanceFromRoute(path, route_timestep, speed_limit)
         
         self._plotRoute(path)
-        self._batchRayCast()
+        self._batchRayCast(drone_ids)
         return foundPath, path
     ################################################################################
     
@@ -154,16 +159,18 @@ class IFDSRoute(BaseRouting):
             
     def _processTargetVel(self, speed_limit):
         # Process target_vel
-        # if np.linalg.norm(self.TARGET_VEL) <= 0.03:
-        #     print("stopping")
-        #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
-        #     self._setCommand(SpeedCommandFlag, "hover")
+        if np.linalg.norm(self.TARGET_VEL) <= 0.03:
+            # print("stopping")
+            # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
+            self._setCommand(SpeedCommandFlag, "hover")
             
         if np.linalg.norm(self.TARGET_VEL) > speed_limit:
             # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
             # self.TARGET_VEL = np.zeros(3)
-            self.TARGET_VEL = np.clip(self.TARGET_VEL, 0, speed_limit)
-            print("Max speed reached: " + str(np.linalg.norm(self.TARGET_VEL)))
+            # self.TARGET_VEL = np.clip(self.TARGET_VEL, 0, speed_limit)
+            self.TARGET_VEL = speed_limit
+            print("Max speed: " + str(speed_limit) + "Current Target Speed: " + str(np.linalg.norm(self.TARGET_VEL)))
+            
             # print(": max speed limit reached -> Decelerating")
             # self._setCommand(SpeedCommandFlag, "accelerate", -0.06)
             
