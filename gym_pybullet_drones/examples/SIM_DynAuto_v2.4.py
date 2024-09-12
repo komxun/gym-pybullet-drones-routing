@@ -23,7 +23,7 @@ In a terminal, run as:
 """
 
 import sys
-sys.path.append('../../')   # Locate gym_pybullet_drones directory
+sys.path.append('./../../')   # Locate gym_pybullet_drones directory
 import os
 import time
 import argparse
@@ -44,7 +44,7 @@ from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
-from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag
+from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag, SpeedStatus
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 
@@ -64,8 +64,8 @@ if __name__ == "__main__":
 
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
-    parser.add_argument('--drone',              default="cf2p",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=2,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--drone',              default="cf2x",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
+    parser.add_argument('--num_drones',         default=10,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     H_STEP = .05
     R = .3
     # size: Nx3
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.5,-1*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
     # INIT_XYZS = np.array([[((-1)**i)*(i*0.1)+0.2,-1*(i*0.05), 0.05*i ] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
@@ -170,9 +170,10 @@ if __name__ == "__main__":
                 foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                       state = obs[str(j)]["state"], 
                                                       home_pos = np.array((0,0,0)), 
-                                                      target_pos = np.array((((-1)**j)*(j*0.2), 10, 0.5)),
+                                                      target_pos = np.array((((-1)**j)*(j*0.2), 12, 0.5)),
                                                       speed_limit = env.SPEED_LIMIT,
-                                                      obstacle_data = env.OBSTACLE_DATA
+                                                      obstacle_data = env.OBSTACLE_DATA,
+                                                      drone_ids = env.DRONE_IDS
                                                       )
                 if foundPath>0:
                     routeCounter+=1
@@ -187,37 +188,48 @@ if __name__ == "__main__":
                 #     print("ALERT======Switching to GLOBAL PATH=======")
                 #     routing[j].ACTIVATE_GLOBAL_PATH = 1
                             
-                
+                routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.1)
+                routing[j]._setCommand(RouteCommandFlag, "follow_local")
                 NUM_WP = path.shape[1]
                 
-                # ---------- Manual logic to activate hovering mode ----------
-                # if ctrlCounter >= 500 and ctrlCounter < 800:
-                #     flagHover[j] = 1
-                # else:
-                #     flagHover[j] = 0
+            
                 # ------------------------------------------------------------
                 # if ctrlCounter > 200:
                 #     routing[j]._setCommand(RouteCommandFlag, "follow_global")
-                # elif ctrlCounter > 10:
-                #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
+                # # elif ctrlCounter > 10:
+                # #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
                 # if ctrlCounter==80 or ctrlCounter==400:
                 #     routing[j]._setCommand(RouteCommandFlag, "change_route")
+                # if ctrlCounter==2:
+                #     routing[j]._setCommand(RouteCommandFlag, "follow_global")
+                # elif ctrlCounter==10:
+                #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
                     
+                # if ctrlCounter%20==0:
+                #     routing[j]._setCommand(RouteCommandFlag, "change_route")
                 
                 # ---------- Manual logic to accelerate/decelerate ----------
-                # if ctrlCounter >= 100 and ctrlCounter < 300:
-                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", -0.06) # [m/s^2]
-                #     routing[0]._setCommand(SpeedCommandFlag, "hover")
+                # print(f"ctrlCounter = {ctrlCounter}")
+                # if ctrlCounter >= 100 and ctrlCounter < 200 :
+                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", -2) # [m/s^2]
+                #     # routing[j]._setCommand(SpeedCommandFlag, "constant")
+                #     # routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.1) # [m/s^2]
+                #     # routing[j]._setCommand(SpeedCommandFlag, "hover")
+                # elif ctrlCounter >500 and ctrlCounter <600:
+                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 # else:
-                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.01)
+                #     # print("accelerating")
+                #     routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.1)
                     
+                
+                # routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0.1)
                 # if ctrlCounter == 400 and j==1:
                 #     routing[j]._setCommand(RouteCommandFlag, "follow_local")
                                   
                 # if ctrlCounter == 400 and j==2:
                 #     routing[j]._setCommand(RouteCommandFlag, "change_route")
                 # ------------------------------------------------------------
-                
+                # print(f"curPos: {routing[j].CUR_POS}, targPos: {routing[j].TARGET_POS}")
                 #### Compute control for the current way point #############
                 action[str(j)], _, _ = ctrl[j].computeControlFromState(control_timestep=CTRL_EVERY_N_STEPS*env.TIMESTEP,
                                                                        state=obs[str(j)]["state"],

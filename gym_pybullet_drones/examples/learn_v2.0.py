@@ -19,18 +19,26 @@ It is not meant as a good/effective learning example.
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 import time
+import torch
 import argparse
 import gym
 import numpy as np
 from stable_baselines3 import A2C
 from stable_baselines3.a2c import MlpPolicy
 from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.policies import ActorCriticPolicy as a2cppoMlpPolicy
 import ray
 from ray.tune import register_env
 from ray.rllib.agents import ppo
 
 from gym_pybullet_drones.utils.Logger import Logger
+
+from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
+from gym_pybullet_drones.envs.single_agent_rl.AutoroutingAviary import AutoroutingAviary
 from gym_pybullet_drones.envs.single_agent_rl.TakeoffAviary import TakeoffAviary
+from gym_pybullet_drones.envs.single_agent_rl.HoverAviary import HoverAviary
+from gym_pybullet_drones.envs.single_agent_rl.FlyThruGateAviary import FlyThruGateAviary
+from gym_pybullet_drones.envs.single_agent_rl.TuneAviary import TuneAviary
 from gym_pybullet_drones.utils.utils import sync, str2bool
 
 DEFAULT_RLLIB = False
@@ -41,32 +49,46 @@ DEFAULT_COLAB = False
 
 def run(rllib=DEFAULT_RLLIB,output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=DEFAULT_COLAB, record_video=DEFAULT_RECORD_VIDEO):
 
+    env_name = "ca_static-aviary-v0"
     #### Check the environment's spaces ########################
-    env = gym.make("takeoff-aviary-v0")
+    env = gym.make(env_name)
     print("[INFO] Action space:", env.action_space)
     print("[INFO] Observation space:", env.observation_space)
     check_env(env,
               warn=True,
               skip_render_check=True
               )
+    
+    #### On-policy algorithms ##################################
+    onpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
+                           net_arch=[512, 512, dict(vf=[256, 128], pi=[256, 128])]
+                           ) # or None
 
     #### Train the model #######################################
     if not rllib:
         model = A2C(MlpPolicy,
                     env,
+                    policy_kwargs=onpolicy_kwargs,
                     verbose=1
                     )
-        model.learn(total_timesteps=10000) # Typically not enough
+        model.learn(total_timesteps=30000) # Typically not enough
     else:
         ray.shutdown()
         ray.init(ignore_reinit_error=True)
-        register_env("takeoff-aviary-v0", lambda _: TakeoffAviary())
+        
+        if env_name == "takeoff-aviary-v0":
+            register_env("takeoff-aviary-v0", lambda _: TakeoffAviary())
+        elif env_name == "hover-aviary-v0":
+            register_env("hover-aviary-v0", lambda _: HoverAviary())
+        elif env_name == "ca_static-aviary-v0":
+            register_env("ca_static-aviary-v0", lambda _: AutoroutingAviary())
+            
         config = ppo.DEFAULT_CONFIG.copy()
         config["num_workers"] = 2
         config["framework"] = "torch"
-        config["env"] = "takeoff-aviary-v0"
+        config["env"] = env_name
         agent = ppo.PPOTrainer(config)
-        for i in range(3): # Typically not enough
+        for i in range(20): # Typically not enough
             results = agent.train()
             print("[INFO] {:d}: episode_reward max {:f} min {:f} mean {:f}".format(i,
                                                                                    results["episode_reward_max"],
@@ -78,9 +100,18 @@ def run(rllib=DEFAULT_RLLIB,output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI
         ray.shutdown()
 
     #### Show (and record a video of) the model's performance ##
-    env = TakeoffAviary(gui=gui,
-                        record=record_video
-                        )
+    if env_name == "takeoff-aviary-v0":
+        env = TakeoffAviary(gui=gui,
+                            record=record_video
+                            )
+    elif env_name == "hover-aviary-v0":
+        env = HoverAviary(gui=gui,
+                          record=record_video
+                          )
+    elif env_name == "ca_static-aviary-v0":
+        env = AutoroutingAviary(gui=gui,
+                                record=record_video
+                                )
     logger = Logger(logging_freq_hz=int(env.SIM_FREQ/env.AGGR_PHY_STEPS),
                     num_drones=1,
                     output_folder=output_folder,
@@ -88,7 +119,7 @@ def run(rllib=DEFAULT_RLLIB,output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI
                     )
     obs = env.reset()
     start = time.time()
-    for i in range(3*env.SIM_FREQ):
+    for i in range(12*env.SIM_FREQ):
         if not rllib:
             action, _states = model.predict(obs,
                                             deterministic=True

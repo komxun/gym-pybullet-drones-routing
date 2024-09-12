@@ -139,6 +139,8 @@ class BaseRouting(object):
             
         if self.COMMANDS[1]._name != 'none':
             self._processSpeedCommand()
+        # else:
+        #     print("No SpeedCommand")
                 
     
     def _processRouteCommand(self):
@@ -172,6 +174,8 @@ class BaseRouting(object):
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
             # print("Constant Speed . . .")
+            # cur_vel_unit = self.CUR_VEL /  np.linalg.norm(self.CUR_VEL)
+            # self.TARGET_VEL = cur_vel_unit *self.COMMANDS[1]._value
             self.TARGET_VEL = np.zeros(3)
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
@@ -180,11 +184,19 @@ class BaseRouting(object):
                 # print("*Activate Hovering Mode!")
                 self.TARGET_POS = self.CUR_POS
                 self.TARGET_VEL = np.zeros(3)
+                self.HOVER_POS = self.CUR_POS
                 self.STAT[1] = SpeedStatus.HOVERING
+            else:
+                self.TARGET_POS = self.HOVER_POS
+                self.TARGET_VEL = np.zeros(3)
+                self.STAT[1] = SpeedStatus.HOVERING
+                
+                
+                # print(f"curPos: {self.CUR_POS}, targPos: {self.TARGET_POS}")
         else:
             print("[Error] in _processSpeedCommand()")
         
-        # Reset the speed command
+        # Reset the speed command (NEED)
         # self._resetSpeedCommand() 
                 
     def switchRoute(self):
@@ -192,7 +204,7 @@ class BaseRouting(object):
         if self.STAT[0].value == RouteStatus.GLOBAL.value:
             # print("Switching to Local route")
             # self.STAT[0] = RouteStatus.LOCAL
-            # self.SIM_MODE = 1
+            self.SIM_MODE = 1
             
             self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_LOCAL.value
             self._processRouteCommand()
@@ -200,7 +212,7 @@ class BaseRouting(object):
         elif self.STAT[0].value == RouteStatus.LOCAL.value:
             # print("Switching to Global route")
             # self.STAT[0] = RouteStatus.GLOBAL
-            # self.SIM_MODE =2
+            self.SIM_MODE =2
             
             self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_GLOBAL.value
             self._processRouteCommand()
@@ -248,7 +260,7 @@ class BaseRouting(object):
     def _updateCurVel(self, vel):
         self.CUR_VEL = vel
         
-    def _batchRayCast(self):
+    def _batchRayCast(self, drone_ids):
         """
         Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
         detected obstacle's id
@@ -263,8 +275,8 @@ class BaseRouting(object):
         rayTo = []
         rayIds = []
         # numRays = 1024
-        numRays = 500
-        # numRays = 250
+        # numRays = 100
+        numRays = 200
         rayLen = 1.5
         # rayLen = 4
         rayHitColor = [1, 0, 0]
@@ -285,6 +297,8 @@ class BaseRouting(object):
         # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
         results = p.rayTestBatch(rayFrom, rayTo)
         
+        if (not replaceLines):
+          p.removeAllUserDebugItems()
         for i in range(numRays):
             hitObjectUid = results[i][0]
             
@@ -292,11 +306,14 @@ class BaseRouting(object):
                 hitPosition = [0, 0, 0]
                 # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
             else:
-                if hitObjectUid!=0:
+                # This case, no detection of other fellow UAVs
+                if hitObjectUid!=0 and hitObjectUid not in drone_ids:
+                # if hitObjectUid!=0:
                     detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
                     hitPosition = results[i][3]
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lifeTime=0.1)
+                    
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2,lifeTime=0.1)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
 
@@ -335,7 +352,8 @@ class BaseRouting(object):
                             home_pos,
                             target_pos,
                             speed_limit,
-                            obstacle_data=None
+                            obstacle_data=None,
+                            drone_ids = np.array([1])
                             ):
         """Interface method using `computeRoute`.
 
@@ -368,7 +386,8 @@ class BaseRouting(object):
                                    home_pos = home_pos,
                                    target_pos=target_pos,
                                    speed_limit = speed_limit,
-                                   obstacle_data = self.DETECTED_OBS_DATA
+                                   obstacle_data = self.DETECTED_OBS_DATA,
+                                   drone_ids = drone_ids
                                    )
 
     ################################################################################
@@ -382,7 +401,8 @@ class BaseRouting(object):
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacle_data=None
+                     obstacle_data,
+                     drone_ids
                      ):
         """Abstract method to compute the route for a single drone.
 
@@ -419,7 +439,7 @@ class BaseRouting(object):
     def _plotRoute(self, path):
         pathColor = [0, 0, 1]
         for i in range(0, path.shape[1]-1, 1):
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.05)
             
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):

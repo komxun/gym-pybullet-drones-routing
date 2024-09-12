@@ -62,7 +62,7 @@ DEFAULT_ENV = 'hover'
 DEFAULT_ALGO = 'ppo'
 DEFAULT_OBS = ObservationType('kin')
 DEFAULT_ACT = ActionType('one_d_rpm')
-DEFAULT_CPU = 1
+DEFAULT_CPU = 4
 DEFAULT_STEPS = 35000
 DEFAULT_OUTPUT_FOLDER = 'results'
 

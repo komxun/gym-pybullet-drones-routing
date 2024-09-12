@@ -12,6 +12,7 @@ To run the script, type in a terminal:
 import sys
 sys.path.append('../../')
 import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import time
 from datetime import datetime
 import argparse
@@ -46,7 +47,7 @@ from gym_pybullet_drones.utils.utils import sync, str2bool
 import shared_constants
 
 DEFAULT_GUI = True
-DEFAULT_PLOT = True
+DEFAULT_PLOT = False
 DEFAULT_OUTPUT_FOLDER = 'results'
 
 def run(exp, gui=DEFAULT_GUI, plot=DEFAULT_PLOT, output_folder=DEFAULT_OUTPUT_FOLDER):
@@ -99,8 +100,9 @@ def run(exp, gui=DEFAULT_GUI, plot=DEFAULT_PLOT, output_folder=DEFAULT_OUTPUT_FO
                         record=False,
                         aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
                         obs=OBS,
-                        act=ACT
+                        act=ACT,
                         )
+    
     logger = Logger(logging_freq_hz=int(test_env.SIM_FREQ/test_env.AGGR_PHY_STEPS),
                     num_drones=1,
                     output_folder=output_folder
@@ -113,14 +115,14 @@ def run(exp, gui=DEFAULT_GUI, plot=DEFAULT_PLOT, output_folder=DEFAULT_OUTPUT_FO
                                         )
         obs, reward, done, info = test_env.step(action)
         test_env.render()
-        if OBS==ObservationType.KIN:
-            logger.log(drone=0,
-                       timestamp=i/test_env.SIM_FREQ,
-                       state= np.hstack([obs[0:3], np.zeros(4), obs[3:15],  np.resize(action, (4))]),
-                       control=np.zeros(12)
-                       )
+        # if OBS==ObservationType.KIN:
+        #     logger.log(drone=0,
+        #                timestamp=i/test_env.SIM_FREQ,
+        #                state= np.hstack([obs[0:3], np.zeros(4), obs[3:15],  np.resize(action, (4))]),
+        #                control=np.zeros(12)
+        #                )
         sync(np.floor(i*test_env.AGGR_PHY_STEPS), start, test_env.TIMESTEP)
-        # if done: obs = test_env.reset() # OPTIONAL EPISODE HALT
+        if done: obs = test_env.reset() # OPTIONAL EPISODE HALT
     test_env.close()
     logger.save_as_csv("sa") # Optional CSV save
     if plot:

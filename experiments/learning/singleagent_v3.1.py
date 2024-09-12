@@ -23,6 +23,7 @@ import sys
 # sys.path.append('../../')
 sys.path.append('C:\\Users\\s400263\\Documents\\gym-pybullet-drones-routing')
 import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import time
 from datetime import datetime
 from sys import platform
@@ -59,7 +60,7 @@ from gym_pybullet_drones.utils.utils import sync
 
 import shared_constants
 
-EPISODE_REWARD_THRESHOLD = -0 # Upperbound: rewards are always negative, but non-zero
+EPISODE_REWARD_THRESHOLD = -100 # Upperbound: rewards are always negative, but non-zero
 """float: Reward threshold to halt the script."""
 
 # DEFAULT_ENV = 'hover'
@@ -76,7 +77,8 @@ DEFAULT_OBS = ObservationType('kin')
 # DEFAULT_OBS = ObservationType('rgb')
 DEFAULT_ACT = ActionType('autorouting')
 DEFAULT_CPU = 1
-DEFAULT_STEPS = 35000
+DEFAULT_STEPS = 40000
+# DEFAULT_STEPS = 100000
 DEFAULT_OUTPUT_FOLDER = 'results'
 
 komsunWantsRender = False
@@ -122,16 +124,20 @@ def run(
     # exit()
 
     env_name = env+"-aviary-v0"
+    
     if komsunWantsRender:
         sa_env_kwargs = dict(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act, gui=True)
     else:
         sa_env_kwargs = dict(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act)
         
+    sa_env_kwargs2 = dict(aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, obs=obs, act=act, gui=True)
+    
+        
     # train_env = gym.make(env_name, 
-    #                      aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
-    #                      obs=obs, 
-    #                      act=act,
-    #                      gui=True) # single environment instead of a vectorized one    
+    #                       aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS, 
+    #                       obs=obs, 
+    #                       act=act,
+    #                       gui=False) # single environment instead of a vectorized one    
 
     if env_name == "takeoff-aviary-v0":
         train_env = make_vec_env(TakeoffAviary,
@@ -169,33 +175,43 @@ def run(
     
     #### On-policy algorithms ##################################
     onpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
-                           net_arch=[512, 512, dict(vf=[256, 128], pi=[256, 128])]
-                           ) # or None
+                            net_arch=[512, 512, dict(vf=[256, 128], pi=[256, 128])]
+                            ) # or None
+    
+    # onpolicy_kwargs = None
     
     if algo == 'a2c':
-        model = A2C(a2cppoMlpPolicy,
+        # model = A2C(a2cppoMlpPolicy,
+        #             train_env,
+        #             policy_kwargs=onpolicy_kwargs,
+        #             tensorboard_log=filename+'/tb/',
+        #             verbose=1
+        #             ) if obs == ObservationType.KIN else A2C(a2cppoCnnPolicy,
+        #                                                           train_env,
+        #                                                           policy_kwargs=onpolicy_kwargs,
+        #                                                           tensorboard_log=filename+'/tb/',
+        #                                                           verbose=1
+        #                                                           )
+        model = A2C("MlpPolicy",
                     train_env,
-                    policy_kwargs=onpolicy_kwargs,
                     tensorboard_log=filename+'/tb/',
-                    verbose=1
-                    ) if obs == ObservationType.KIN else A2C(a2cppoCnnPolicy,
-                                                                  train_env,
-                                                                  policy_kwargs=onpolicy_kwargs,
-                                                                  tensorboard_log=filename+'/tb/',
-                                                                  verbose=1
-                                                                  )
+                    verbose=1)
     if algo == 'ppo':
-        model = PPO(a2cppoMlpPolicy,
+        # model = PPO(a2cppoMlpPolicy,
+        #             train_env,
+        #             policy_kwargs=onpolicy_kwargs,
+        #             tensorboard_log=filename+'/tb/',
+        #             verbose=1
+        #             ) if obs == ObservationType.KIN else PPO(a2cppoCnnPolicy,
+        #                                                           train_env,
+        #                                                           policy_kwargs=onpolicy_kwargs,
+        #                                                           tensorboard_log=filename+'/tb/',
+        #                                                           verbose=1
+        #                                                           )
+        model = PPO("MlpPolicy",
                     train_env,
-                    policy_kwargs=onpolicy_kwargs,
                     tensorboard_log=filename+'/tb/',
-                    verbose=1
-                    ) if obs == ObservationType.KIN else PPO(a2cppoCnnPolicy,
-                                                                  train_env,
-                                                                  policy_kwargs=onpolicy_kwargs,
-                                                                  tensorboard_log=filename+'/tb/',
-                                                                  verbose=1
-                                                                  )
+                    verbose=1)
 
     #### Off-policy algorithms #################################
     offpolicy_kwargs = dict(activation_fn=torch.nn.ReLU,
@@ -244,8 +260,13 @@ def run(
                             aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
                             obs=obs,
                             act=act,
-                            gui=False
+                            gui=False,
                             )
+        # eval_env = make_vec_env(AutoroutingAviary,
+        #                           env_kwargs=sa_env_kwargs2,
+        #                           n_envs=cpu,
+        #                           seed=0,
+        #                           )
         
     elif obs == ObservationType.RGB:
         if env_name == "takeoff-aviary-v0": 
@@ -274,7 +295,7 @@ def run(
                                     )
         if env_name == "ca_static-aviary-v0":
             eval_env = make_vec_env(AutoroutingAviary,
-                                    env_kwargs=sa_env_kwargs,
+                                    env_kwargs=sa_env_kwargs2,
                                     n_envs=1,
                                     seed=0
                                     )
@@ -292,7 +313,7 @@ def run(
                                  log_path=filename+'/',
                                  eval_freq=int(2000/cpu),
                                  deterministic=True,
-                                 render=False
+                                 render=True
                                  )
     
     model.learn(total_timesteps=steps, #int(1e12),

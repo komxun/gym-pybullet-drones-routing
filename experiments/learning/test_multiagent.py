@@ -315,18 +315,18 @@ if __name__ == "__main__":
         action = {0: temp[0][0], 1: temp[1][0]}
         obs, reward, done, info = test_env.step(action)
         test_env.render()
-        if OBS==ObservationType.KIN: 
-            for j in range(NUM_DRONES):
-                logger.log(drone=j,
-                           timestamp=i/test_env.SIM_FREQ,
-                           state= np.hstack([obs[j][0:3], np.zeros(4), obs[j][3:15], np.resize(action[j], (4))]),
-                           control=np.zeros(12)
-                           )
+        # if OBS==ObservationType.KIN: 
+        #     for j in range(NUM_DRONES):
+        #         logger.log(drone=j,
+        #                    timestamp=i/test_env.SIM_FREQ,
+        #                    state= np.hstack([obs[j][0:3], np.zeros(4), obs[j][3:15], np.resize(action[j], (4))]),
+        #                    control=np.zeros(12)
+        #                    )
         sync(np.floor(i*test_env.AGGR_PHY_STEPS), start, test_env.TIMESTEP)
         # if done["__all__"]: obs = test_env.reset() # OPTIONAL EPISODE HALT
     test_env.close()
-    logger.save_as_csv("ma") # Optional CSV save
-    logger.plot()
+    # logger.save_as_csv("ma") # Optional CSV save
+    # logger.plot()
 
     #### Shut down Ray #########################################
     ray.shutdown()

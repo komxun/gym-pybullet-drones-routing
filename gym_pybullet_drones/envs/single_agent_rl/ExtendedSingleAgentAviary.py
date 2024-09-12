@@ -91,7 +91,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
         
         # =============================================================================
         homePos =  np.array([0,0,0.5]) 
-        destin  =  np.array([0.2, 10, 1])
+        destin  =  np.array([0.2, 12, 1])
         self.HOME_POS = homePos
         self.DESTIN = destin
         # =============================================================================
@@ -152,7 +152,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
 
         """
         if self.ACT_TYPE == ActionType.AUTOROUTING:
-            return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(2)  # 5 discrete actions, details in _preprocessAction()
             # return spaces.Box(low=0, high=4, shape=(1,), dtype=np.float32)
         else:
             return super()._actionSpace()
@@ -181,6 +181,7 @@ class ExtendedSingleAgentAviary(RoutingAviary):
             commanded to the 4 motors of each drone.
 
         """
+        # self._applyForceToObstacle()
         if self.ACT_TYPE == ActionType.AUTOROUTING:
             
             
@@ -199,26 +200,39 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                                                                  home_pos = self.HOME_POS, 
                                                                  target_pos = self.DESTIN,
                                                                  speed_limit = self.SPEED_LIMIT,
-                                                                 obstacle_data = self.OBSTACLE_DATA
+                                                                 obstacle_data = self.OBSTACLE_DATA,
+                                                                 drone_ids = self.DRONE_IDS
                                                                  )
         
-            if self.routing.route_counter == 0:
+            if self.routing.route_counter == 1:
                 if foundPath>0:
                     print("Calculating Global Route . . .")
                     self.routing.setGlobalRoute(path)
                 else:
                     raise ValueError("[Error] Global route was not found. Mission aborted.")
-    
-            if action == 0:  # Constant Vel
-                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
-            elif action == 1:  # Accelerate
-                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
-            elif action == 2:  # Decelerate
-                self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
-            elif action == 3:  # Stop (Hover)
-                self.routing._setCommand(SpeedCommandFlag, "hover")
-            elif action == 4:  # Change Route
-                self.routing._setCommand(RouteCommandFlag, "change_route")
+            
+            # if action == 0:  # Constant Vel
+            #     self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
+            # elif action == 1:  # Accelerate
+            #     # self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
+            #     self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.1)
+            # elif action == 2:  # Decelerate
+            #     # self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
+            #     self.routing._setCommand(SpeedCommandFlag, "accelerate", -2)
+            # elif action == 3:  # Stop (Hover)
+            #     self.routing._setCommand(RouteCommandFlag, "follow_global")
+            # elif action == 4:  # Stop (Hover)
+            #     self.routing._setCommand(RouteCommandFlag, "follow_local")
+            # elif action == 5:  # Change Route
+            #     self.routing._setCommand(SpeedCommandFlag, "hover")
+                
+            self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
+            if action ==0:
+                self.routing._setCommand(RouteCommandFlag, "follow_global")
+                
+            elif action ==1:
+                self.routing._setCommand(RouteCommandFlag, "follow_local")
+                
             #     if self.routing.STAT:
             #         print("Alert: no route found!--> following global route")
             #         self.routing._setCommand(RouteCommandFlag, "follow_global")
@@ -227,24 +241,24 @@ class ExtendedSingleAgentAviary(RoutingAviary):
                 raise ValueError(f"Invalid action: {action}")
                 
             #### Compute control for the current way point #############
-            # rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
-            #                                                        state=state,
-            #                                                        target_pos = self.routing.TARGET_POS, 
-            #                                                        target_rpy = state[7:10],
-            #                                                        target_vel = self.routing.TARGET_VEL
-            #                                                        )
+            rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
+                                                                    state=state,
+                                                                    target_pos = self.routing.TARGET_POS, 
+                                                                    target_rpy = np.array([0,0,0]),
+                                                                    target_vel = self.routing.TARGET_VEL
+                                                                    )
             
             
-            rpm, _, _ = self.ctrl.computeControl(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP, 
-                                                 cur_pos=state[0:3],
-                                                 cur_quat=state[3:7],
-                                                 cur_vel=state[10:13],
-                                                 cur_ang_vel=state[13:16],
-                                                 target_pos=self.routing.TARGET_POS,
-                                                 target_vel=self.routing.TARGET_VEL
-                                                 )
-            self.routing._updateCurPos(state[0:3])
-            self.routing._updateCurVel(state[10:13])
+            # rpm, _, _ = self.ctrl.computeControl(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP, 
+            #                                      cur_pos=state[0:3],
+            #                                      cur_quat=state[3:7],
+            #                                      cur_vel=state[10:13],
+            #                                      cur_ang_vel=state[13:16],
+            #                                      target_pos=self.routing.TARGET_POS,
+            #                                      target_vel=self.routing.TARGET_VEL
+            #                                      )
+            # self.routing._updateCurPos(state[0:3])
+            # self.routing._updateCurVel(state[10:13])
             return rpm.astype(np.float32)  # Ensure rpm is returned as float32        
         else:
             return super()._preprocessAction(action)
