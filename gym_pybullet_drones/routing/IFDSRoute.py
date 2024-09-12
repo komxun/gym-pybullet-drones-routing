@@ -31,7 +31,7 @@ class IFDSRoute(BaseRouting):
         # self.RHO0_IFDS = 6.5
         self.RHO0_IFDS = 8.5
         self.SIGMA0_IFDS = 0.8  # 1
-        self.SF_IFDS = 1
+        self.SF_IFDS = 0
         self.TARGET_THRESH = 0.1
         self.SIM_MODE = 2
         self.DT = 0.5  # 0.1  #0.5

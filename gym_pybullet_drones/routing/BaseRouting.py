@@ -3,6 +3,7 @@ import numpy as np
 import xml.etree.ElementTree as etxml
 import pkg_resources
 from enum import Enum
+import pybullet as p
 
 from gym_pybullet_drones.utils.enums import DroneModel
 
@@ -190,6 +191,19 @@ class BaseRouting(object):
         raise NotImplementedError
 
 ################################################################################
+################################################################################
+    
+    def getDistanceToDestin(self):
+        cur_pos = self.CUR_POS.reshape(1,3)
+        destin = self.DESTINATION.reshape(1,3)
+        return np.linalg.norm(cur_pos - destin)
+
+    ################################################################################
+
+    def _plotRoute(self, path):
+        pathColor = [0, 0, 1]
+        for i in range(0, path.shape[1]-1, 1):
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
@@ -379,13 +393,102 @@ class BaseRouting(object):
         self.COMMANDS[1] = Commander(RouteCommandFlag, "none")
 
     ################################################################################
+    def setGlobalRoute(self, route):
+        """Store global route
+        Parmaters
+        ---------
+        route : ndarray
+            (3,N)-shaped array of floats containing the global route
+        """
+        self.GLOBAL_PATH = route
+        # print("Setting a global route")
     
-    def _resetAllCommands(self):
-        self._resetRouteCommand()
-        self._resetSpeedCommand()
+    ################################################################################
+    
+    def _updateCurPos(self, pos):
+        self.CUR_POS = pos
         
-    def _resetRouteCommand(self):
-        self.COMMANDS[0] = Commander(RouteCommandFlag, "none")
+    def _updateCurVel(self, vel):
+        self.CUR_VEL = vel
+        
+    def _batchRayCast(self, drone_ids):
+        """
+        Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
+        detected obstacle's id
+
+        Returns:
+            None.
+
+        """
+        # rayFrom = self.CUR_POS
+        # p.removeAllUserDebugItems()
+        detected_obs_ids = []
+        rayTo = []
+        rayIds = []
+        # numRays = 1024
+        # numRays = 100
+        numRays = 200
+        rayLen = 1.5
+        # rayLen = 4
+        rayHitColor = [1, 0, 0]
+        rayMissColor = [0, 1, 0]
+
+        replaceLines = True
+
+        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
+        indices = np.arange(0, numRays, dtype=float) + 0.5
+
+
+        phi = np.arccos(1 - 2*indices/numRays)
+        theta = np.pi * (1 + 5**0.5) * indices
+
+        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
+        rayFrom = [self.CUR_POS for _ in range(numRays)]
+        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        results = p.rayTestBatch(rayFrom, rayTo)
+        
+        if (not replaceLines):
+          p.removeAllUserDebugItems()
+        for i in range(numRays):
+            hitObjectUid = results[i][0]
+            
+            if (hitObjectUid < 0):
+                hitPosition = [0, 0, 0]
+                # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+            else:
+                # This case, no detection of other fellow UAVs
+                if hitObjectUid!=0 and hitObjectUid not in drone_ids:
+                # if hitObjectUid!=0:
+                    detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
+                    hitPosition = results[i][3]
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                    
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2,lifeTime=0.1)
     
-    def _resetSpeedCommand(self):
-        self.COMMANDS[1] = Commander(RouteCommandFlag, "none")
+        self.DETECTED_OBS_IDS = detected_obs_ids
+
+    ################################################################################
+    
+    def _processDetection(self, obstacle_data):
+        """
+        Screen obstacle_data based on the detection from self.DETECTED_OBS_IDS. 
+
+        Args:
+            obstacle_data (dict): dictionary of dictionary of obstacles data where
+                key is the obstacle's id and values include 'position' and 'size'.
+
+        Returns:
+            None.
+
+        """
+        if len(self.DETECTED_OBS_IDS) != 0:
+            tempObs = []
+            for j in self.DETECTED_OBS_IDS:
+                self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
+                                                      "size": obstacle_data[str(j)]["size"]}
+                tempObs.append(obstacle_data[str(j)]["position"])
+        else:
+            self.DETECTED_OBS_DATA = {}
+    
+    
