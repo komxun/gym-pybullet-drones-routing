@@ -200,7 +200,9 @@ class RoutingAviary(BaseAviary):
                     self._downwash(i)
             #### PyBullet computes the new state, unless Physics.DYN ###
             if self.PHYSICS != Physics.DYN:
+                self._applyForceToObstacle()
                 p.stepSimulation(physicsClientId=self.CLIENT)
+                p.performCollisionDetection(physicsClientId=self.CLIENT)
             #### Save the last applied action (e.g. to compute drag) ###
             self.last_clipped_action = clipped_action
         #### Update and store the drones kinematic information #####
@@ -537,7 +539,7 @@ class RoutingAviary(BaseAviary):
                     sign *= -1
                 p.changeDynamics(j, -1, linearDamping=2)
                 pos, orn = p.getBasePositionAndOrientation(j)
-                p.applyExternalForce(j, -1, [6*sign,sign,9.81], pos, flags=p.WORLD_FRAME)   
+                p.applyExternalForce(j, -1, [400*sign,sign,9.81], pos, flags=p.WORLD_FRAME)   
                 
     
     ################################################################################
