@@ -203,7 +203,7 @@ class BaseRouting(object):
     def _plotRoute(self, path):
         pathColor = [0, 0, 1]
         for i in range(0, path.shape[1]-1, 1):
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.05)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.

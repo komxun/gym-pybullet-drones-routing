@@ -39,7 +39,9 @@ class ActionType(Enum):
     VEL = "vel"                 # Velocity input (using PID control)
     ONE_D_RPM = "one_d_rpm"     # 1D (identical input to all motors) with RPMs
     ONE_D_PID = "one_d_pid"     # 1D (identical input to all motors) with PID control
-
+    # New Action
+    AUTOROUTING = "autorouting"  # Route selection with speed adjustment
+    
 ################################################################################
 
 class ObservationType(Enum):

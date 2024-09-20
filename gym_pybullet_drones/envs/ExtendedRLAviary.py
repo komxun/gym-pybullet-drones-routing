@@ -12,7 +12,7 @@ from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 
-class BaseRLAviary(RoutingAviary):
+class ExtendedRLAviary(RoutingAviary):
     """Base single and multi-agent environment class for reinforcement learning."""
     
     ################################################################################
@@ -66,18 +66,31 @@ class BaseRLAviary(RoutingAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, waypoint or velocity with PID control; etc.)
 
         """
+        # =============================================================================
+        homePos =  np.array([0,0,0.5]) 
+        destin  =  np.array([0.2, 12, 1])
+        self.HOME_POS = homePos
+        self.DESTIN = destin
+        # =============================================================================
+
         #### Create a buffer for the last .5 sec of actions ########
         self.ACTION_BUFFER_SIZE = int(ctrl_freq//2)
+        # self.ACTION_BUFFER_SIZE = 1
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
         ####
         vision_attributes = True if obs == ObservationType.RGB else False
         self.OBS_TYPE = obs
         self.ACT_TYPE = act
         #### Create integrated controllers #########################
-        if act in [ActionType.PID, ActionType.VEL, ActionType.ONE_D_PID]:
+        if act in [ActionType.PID, ActionType.VEL, ActionType.ONE_D_PID, ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
             if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
                 self.ctrl = [DSLPIDControl(drone_model=DroneModel.CF2X) for i in range(num_drones)]
+                self.routing = [IFDSRoute(drone_model=DroneModel.CF2X) for i in range(num_drones)]
+                
+                for j in range(len(self.routing)):
+                    self.routing[j].HOME_POS = homePos
+                    self.routing[j].DESTINATION = destin
             else:
                 print("[ERROR] in BaseRLAviary.__init()__, no controller is available for the specified drone_model")
         super().__init__(drone_model=drone_model,
@@ -110,24 +123,27 @@ class BaseRLAviary(RoutingAviary):
 
         """
         if self.ACT_TYPE == ActionType.AUTOROUTING:
-            return spaces.Discrete(2)  # 5 discrete actions, details in _preprocessAction()
-
-        if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
-            size = 4
-        elif self.ACT_TYPE==ActionType.PID:
-            size = 3
-        elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
             size = 1
+            for i in range(self.ACTION_BUFFER_SIZE):
+                self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
+            return spaces.Discrete(2)  # 5 discrete actions, details in _preprocessAction()
         else:
-            print("[ERROR] in BaseRLAviary._actionSpace()")
-            exit()
-        act_lower_bound = np.array([-1*np.ones(size) for i in range(self.NUM_DRONES)])
-        act_upper_bound = np.array([+1*np.ones(size) for i in range(self.NUM_DRONES)])
-        #
-        for i in range(self.ACTION_BUFFER_SIZE):
-            self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-        #
-        return spaces.Box(low=act_lower_bound, high=act_upper_bound, dtype=np.float32)
+            if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
+                size = 4
+            elif self.ACT_TYPE==ActionType.PID:
+                size = 3
+            elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
+                size = 1
+            else:
+                print("[ERROR] in BaseRLAviary._actionSpace()")
+                exit()
+            act_lower_bound = np.array([-1*np.ones(size) for i in range(self.NUM_DRONES)])
+            act_upper_bound = np.array([+1*np.ones(size) for i in range(self.NUM_DRONES)])
+            #
+            for i in range(self.ACTION_BUFFER_SIZE):
+                self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
+            #
+            return spaces.Box(low=act_lower_bound, high=act_upper_bound, dtype=np.float32)
 
     ################################################################################
 
@@ -153,65 +169,21 @@ class BaseRLAviary(RoutingAviary):
             commanded to the 4 motors of each drone.
 
         """
-        self.action_buffer.append(action)
+        # p.removeAllUserDebugItems()
+        self.action_buffer.append(np.array([[float(action)]])) # Need to revise this to have N-number of drones
+                                                        # (similar to [[discrete_act_lo] for i in range(self.NUM_DRONES)])])
         rpm = np.zeros((self.NUM_DRONES,4))
-        for k in range(action.shape[0]):
-            target = action[k, :]
+        for k in range(1):
             # Process action based on ACT_TYPE
-            if self.ACT_TYPE == ActionType.RPM:
-                rpm[k,:] = np.array(self.HOVER_RPM * (1+0.05*target))
-            elif self.ACT_TYPE == ActionType.PID:
+            if self.ACT_TYPE == ActionType.AUTOROUTING:
                 state = self._getDroneStateVector(k)
-                next_pos = self._calculateNextStep(
-                    current_position=state[0:3],
-                    destination=target,
-                    step_size=1,
-                    )
-                rpm_k, _, _ = self.ctrl[k].computeControl(control_timestep=self.CTRL_TIMESTEP,
-                                                        cur_pos=state[0:3],
-                                                        cur_quat=state[3:7],
-                                                        cur_vel=state[10:13],
-                                                        cur_ang_vel=state[13:16],
-                                                        target_pos=next_pos
-                                                        )
-                rpm[k,:] = rpm_k
-            elif self.ACT_TYPE == ActionType.VEL:
-                state = self._getDroneStateVector(k)
-                if np.linalg.norm(target[0:3]) != 0:
-                    v_unit_vector = target[0:3] / np.linalg.norm(target[0:3])
-                else:
-                    v_unit_vector = np.zeros(3)
-                temp, _, _ = self.ctrl[k].computeControl(control_timestep=self.CTRL_TIMESTEP,
-                                                        cur_pos=state[0:3],
-                                                        cur_quat=state[3:7],
-                                                        cur_vel=state[10:13],
-                                                        cur_ang_vel=state[13:16],
-                                                        target_pos=state[0:3], # same as the current position
-                                                        target_rpy=np.array([0,0,state[9]]), # keep current yaw
-                                                        target_vel=self.SPEED_LIMIT * np.abs(target[3]) * v_unit_vector # target the desired velocity vector
-                                                        )
-                rpm[k,:] = temp
-            elif self.ACT_TYPE == ActionType.ONE_D_RPM:
-                rpm[k,:] = np.repeat(self.HOVER_RPM * (1+0.05*target), 4)
-            elif self.ACT_TYPE == ActionType.ONE_D_PID:
-                state = self._getDroneStateVector(k)
-                res, _, _ = self.ctrl[k].computeControl(control_timestep=self.CTRL_TIMESTEP,
-                                                        cur_pos=state[0:3],
-                                                        cur_quat=state[3:7],
-                                                        cur_vel=state[10:13],
-                                                        cur_ang_vel=state[13:16],
-                                                        target_pos=state[0:3]+0.1*np.array([0,0,target[0]])
-                                                        )
-                rpm[k,:] = res
-            elif self.ACT_TYPE == ActionType.AUTOROUTING:
-                state = self._getDroneStateVector(0)
             
                 # Initially set to accelerate
                 # self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
                 # action = 1
                 
                 #------- Compute route (waypoint) to follow ----------------
-                foundPath, path = self.routing.computeRouteFromState(route_timestep=self.routing.route_counter, 
+                foundPath, path = self.routing[k].computeRouteFromState(route_timestep=self.routing[k].route_counter, 
                                                                     state = state, 
                                                                     home_pos = self.HOME_POS, 
                                                                     target_pos = self.DESTIN,
@@ -220,10 +192,10 @@ class BaseRLAviary(RoutingAviary):
                                                                     drone_ids = self.DRONE_IDS
                                                                     )
                 
-                if self.routing.route_counter == 1:
+                if self.routing[k].route_counter == 1:
                     if foundPath>0:
                         print("Calculating Global Route . . .")
-                        self.routing.setGlobalRoute(path)
+                        self.routing[k].setGlobalRoute(path)
                     else:
                         raise ValueError("[Error] Global route was not found. Mission aborted.")
                 # if action == 0:  # Constant Vel
@@ -242,12 +214,12 @@ class BaseRLAviary(RoutingAviary):
                 #     self.routing._setCommand(SpeedCommandFlag, "hover")    
                 
 
-                self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
+                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -0.5)
                 if action ==0:
-                    self.routing._setCommand(RouteCommandFlag, "follow_global")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
                     
                 elif action ==1:
-                    self.routing._setCommand(RouteCommandFlag, "follow_local")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
                     
                 #     if self.routing.STAT:
                 #         print("Alert: no route found!--> following global route")
@@ -257,12 +229,13 @@ class BaseRLAviary(RoutingAviary):
                     raise ValueError(f"Invalid action: {action}")
                 
                 #### Compute control for the current way point #############
-                rpm, _, _ = self.ctrl.computeControlFromState(control_timestep=self.AGGR_PHY_STEPS*self.TIMESTEP,
+                rpm_k, _, _ = self.ctrl[k].computeControlFromState(control_timestep=self.CTRL_TIMESTEP,
                                                                 state=state,
-                                                                target_pos = self.routing.TARGET_POS, 
-                                                                target_rpy = np.array([0,0,0]),
-                                                                target_vel = self.routing.TARGET_VEL
+                                                                target_pos = self.routing[k].TARGET_POS, 
+                                                                target_rpy = self.INIT_RPYS[k, :],
+                                                                target_vel = self.routing[k].TARGET_VEL
                                                                 )
+                rpm[k,:] = rpm_k
             # ================================    
             else:
                 print("[ERROR] in BaseRLAviary._preprocessAction()")
@@ -296,15 +269,21 @@ class BaseRLAviary(RoutingAviary):
             act_lo = -1
             act_hi = +1
             for i in range(self.ACTION_BUFFER_SIZE):
-                if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
-                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
-                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
-                elif self.ACT_TYPE==ActionType.PID:
-                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
-                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
-                elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
-                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo] for i in range(self.NUM_DRONES)])])
-                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi] for i in range(self.NUM_DRONES)])])
+                if self.ACT_TYPE == ActionType.AUTOROUTING:
+                    discrete_act_lo = 0
+                    discrete_act_hi = 1
+                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(self.NUM_DRONES)])])
+                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(self.NUM_DRONES)])])
+                else:
+                    if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
+                    elif self.ACT_TYPE==ActionType.PID:
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
+                    elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo] for i in range(self.NUM_DRONES)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi] for i in range(self.NUM_DRONES)])])
             return spaces.Box(low=obs_lower_bound, high=obs_upper_bound, dtype=np.float32)
             ############################################################
         else:
@@ -345,9 +324,11 @@ class BaseRLAviary(RoutingAviary):
                 obs_12[i, :] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
             ret = np.array([obs_12[i, :] for i in range(self.NUM_DRONES)]).astype('float32')
             #### Add action buffer to observation #######################
+
             for i in range(self.ACTION_BUFFER_SIZE):
                 ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
+            
             return ret
             ############################################################
         else:
-            print("[ERROR] in BaseRLAviary._computeObs()")
+            print("[ERROR] in ExtendedRLAviary._computeObs()")

@@ -12,7 +12,7 @@ from PIL import Image
 class RoutingAviary(BaseAviary):
     """Multi-drone environment class for control applications."""
     
-    OBSTACLE_IDS = []
+    OBSTACLE_IDS = set([])
 
     ################################################################################
 
@@ -27,7 +27,7 @@ class RoutingAviary(BaseAviary):
                   ctrl_freq: int = 240,
                   gui=False,
                   record=False,
-                  obstacles=False,
+                  obstacles=True,
                   user_debug_gui=True,
                   vision_attributes=False,
                   output_folder='results'
@@ -64,6 +64,8 @@ class RoutingAviary(BaseAviary):
             Whether to allocate the attributes needed by vision-based aviary subclasses.
 
         """
+        self.INIT_XYZS = initial_xyzs
+        self.INIT_RPYS = initial_rpys
         super().__init__(drone_model=drone_model,
                           num_drones=num_drones,
                           neighbourhood_radius=neighbourhood_radius,
@@ -83,7 +85,7 @@ class RoutingAviary(BaseAviary):
         speedLimitingFactor = 0.1   # 0.03
         self.SPEED_LIMIT = speedLimitingFactor * self.MAX_SPEED_KMH * (1000/3600)
         self.CONTACT_POINTS = [() for _ in range(self.NUM_DRONES)]
-        self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES)
+        self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES, dtype=int)
         
         self.OBSTACLE_DATA = {}
         self._getObstaclesData()
@@ -171,9 +173,11 @@ class RoutingAviary(BaseAviary):
                                                           ) for i in range(self.NUM_DRONES)]
         #### Save, preprocess, and clip the action to the max. RPM #
         else:
+            # print(f"action = {action}")
             clipped_action = np.reshape(self._preprocessAction(action), (self.NUM_DRONES, 4))
         #### Repeat for as many as the aggregate physics steps #####
         for _ in range(self.PYB_STEPS_PER_CTRL):
+            p.performCollisionDetection(physicsClientId=self.CLIENT)
             #### Update and store the drones kinematic info for certain
             #### Between aggregate steps for certain types of update ###
             if self.PYB_STEPS_PER_CTRL > 1 and self.PHYSICS in [Physics.DYN, Physics.PYB_GND, Physics.PYB_DRAG, Physics.PYB_DW, Physics.PYB_GND_DRAG_DW]:
@@ -200,12 +204,14 @@ class RoutingAviary(BaseAviary):
                     self._downwash(i)
             #### PyBullet computes the new state, unless Physics.DYN ###
             if self.PHYSICS != Physics.DYN:
-                self._applyForceToObstacle()
-                p.stepSimulation(physicsClientId=self.CLIENT)
+                # self._applyForceToObstacle()
                 p.performCollisionDetection(physicsClientId=self.CLIENT)
+                p.stepSimulation(physicsClientId=self.CLIENT)
+                
             #### Save the last applied action (e.g. to compute drag) ###
             self.last_clipped_action = clipped_action
         #### Update and store the drones kinematic information #####
+        self._applyForceToObstacle()
         self._updateAndStoreKinematicInformation()
         self._detectCollision()
         #### Prepare the return values #############################
@@ -255,6 +261,52 @@ class RoutingAviary(BaseAviary):
     #     self._detectCollision()
             
     ################################################################################
+
+    def reset(self,
+              seed : int = None,
+              options : dict = None):
+        """Resets the environment.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed.
+        options : dict[..], optional
+            Additinonal options, unused
+
+        Returns
+        -------
+        ndarray | dict[..]
+            The initial observation, check the specific implementation of `_computeObs()`
+            in each subclass for its format.
+        dict[..]
+            Additional information as a dictionary, check the specific implementation of `_computeInfo()`
+            in each subclass for its format.
+
+        """
+
+        # TODO : initialize random number generator with seed
+        p.resetSimulation(physicsClientId=self.CLIENT)
+        #### Housekeeping ##########################################
+        self._housekeeping()
+        #### Update and store the drones kinematic information #####
+        self._updateAndStoreKinematicInformation()
+        p.performCollisionDetection(physicsClientId=self.CLIENT)
+        self._detectCollision()
+        #### Start video recording #################################
+        self._startVideoRecording()
+        #### Return the initial observation ########################
+        initial_obs = self._computeObs()
+        initial_info = self._computeInfo()
+        return initial_obs, initial_info
+    
+    ################################################################################
+    def save_object_data(func):
+        def wrapper(*arg, **kwarg):
+            id = func(*arg, **kwarg)
+            RoutingAviary.OBSTACLE_IDS.add(id)
+            return id
+        return wrapper
     
     def _addObstacles(self):
         """Add obstacles to the environment.
@@ -262,11 +314,10 @@ class RoutingAviary(BaseAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        scene = 1
+        scene = 2
         
         if scene == 1:
-        
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf",
                         [0, 2, .5],
                         p.getQuaternionFromEuler([0,0,0]),
@@ -275,59 +326,59 @@ class RoutingAviary(BaseAviary):
                         ))
             
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [0.5, 3, 0.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [-0.2, 5, 0+1], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [0.8, 7, 0], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))    
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [1, 4, 0], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [2.5, 4, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [3.5, 4, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [3.5, 6, 2.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [4.5, 7, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [3, 6, 0.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -335,7 +386,7 @@ class RoutingAviary(BaseAviary):
                         physicsClientId=self.CLIENT)) 
             
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [1.5, 8.5, 2.8], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -347,34 +398,14 @@ class RoutingAviary(BaseAviary):
             #             p.getQuaternionFromEuler([0,0,0]), 
             #             useFixedBase = True, 
             #             physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("sphere2.urdf", 
                         [1.5, 9.5, 1], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
             
-            
-            # RoutingAviary.OBSTACLE_IDS.append(
-            #     p.loadURDF("cube.urdf", 
-            #             [0, 8, 2.5], 
-            #             p.getQuaternionFromEuler([0,0,0]), 
-            #             useFixedBase = True, 
-            #             physicsClientId=self.CLIENT)) 
-            # RoutingAviary.OBSTACLE_IDS.append(
-            #     p.loadURDF("cube.urdf", 
-            #             [0, 8, 1.5], 
-            #             p.getQuaternionFromEuler([0,0,0]), 
-            #             useFixedBase = True, 
-            #             physicsClientId=self.CLIENT)) 
-            # RoutingAviary.OBSTACLE_IDS.append(
-            #     p.loadURDF("cube.urdf", 
-            #             [0, 8, 0.5], 
-            #             p.getQuaternionFromEuler([0,0,0]), 
-            #             useFixedBase = True, 
-            #             physicsClientId=self.CLIENT)) 
-            
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [-0.5, 8, 1], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -384,56 +415,102 @@ class RoutingAviary(BaseAviary):
             
         elif scene == 2:
             
-            RoutingAviary.OBSTACLE_IDS.append(
-                p.loadURDF("sphere2.urdf",
+            # Moving obstacles
+            id = p.loadURDF("sphere2.urdf",
                         [0, 2, .5],
                         p.getQuaternionFromEuler([0,0,0]),
                         useFixedBase = False, 
+                        globalScaling = 1.2, 
                         physicsClientId=self.CLIENT
-                        ))
+                        )
+            RoutingAviary.OBSTACLE_IDS.add(id)
+            p.changeDynamics(id, -1, mass=1, linearDamping=2)
+
             
-            RoutingAviary.OBSTACLE_IDS.append(
-                p.loadURDF("sphere2.urdf", 
-                        [0.5, 3, 0.5], 
+            id = p.loadURDF("sphere2.urdf", 
+                        [0, 5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        globalScaling = 0.8,
+                        useFixedBase = False, 
+                        physicsClientId=self.CLIENT)
+            RoutingAviary.OBSTACLE_IDS.add(id)
+            p.changeDynamics(id, -1, mass=1, linearDamping=2)
+            
+            id = p.loadURDF("sphere2.urdf", 
+                        [-0.5, 3.5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        globalScaling = 1,
+                        useFixedBase = False,
+                        physicsClientId=self.CLIENT)
+            RoutingAviary.OBSTACLE_IDS.add(id) 
+            p.changeDynamics(id, -1, linearDamping=2, mass=1)
+            
+            # Static obstacle
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [2, 5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        useFixedBase = True, 
+                        globalScaling = 1.2, 
+                        physicsClientId=self.CLIENT,
+                        )) 
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [-2, 5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        useFixedBase = True, 
+                        globalScaling = 1.2, 
+                        physicsClientId=self.CLIENT)) 
+            
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [2, 5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        useFixedBase = True, 
+                        globalScaling = 1.2, 
+                        physicsClientId=self.CLIENT)) 
+            
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [-3, 2, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        useFixedBase = True, 
+                        globalScaling = 1.2, 
+                        physicsClientId=self.CLIENT)) 
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [2, 2, 0.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))
+            RoutingAviary.OBSTACLE_IDS.add(
+                p.loadURDF("cube.urdf", 
+                        [-2.5, 3.5, 0.5], 
+                        p.getQuaternionFromEuler([0,0,0]), 
+                        useFixedBase = True, 
+                        physicsClientId=self.CLIENT))  
             
-            # RoutingAviary.OBSTACLE_IDS.append(
-            #     p.loadURDF("sphere2.urdf", 
-            #             [0.8, 5, 0+1], 
+            # RoutingAviary.OBSTACLE_IDS.add(
+            #     p.loadURDF("cube.urdf", 
+            #             [0.5, 3, 0], 
             #             p.getQuaternionFromEuler([0,0,0]), 
             #             useFixedBase = True, 
             #             physicsClientId=self.CLIENT))
             
-            RoutingAviary.OBSTACLE_IDS.append(
-                p.loadURDF("sphere2.urdf", 
-                        [0, 5, 0.5], 
-                        p.getQuaternionFromEuler([0,0,0]), 
-                        useFixedBase = False, 
-                        physicsClientId=self.CLIENT))
-            
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [0.8, 7, 0.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))    
             
-            RoutingAviary.OBSTACLE_IDS.append(
-                p.loadURDF("sphere2.urdf", 
-                        [-0.5, 4, 1.5], 
-                        p.getQuaternionFromEuler([0,0,0]), 
-                        useFixedBase = False, 
-                        physicsClientId=self.CLIENT)) 
-            
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [4.5, 7, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [3, 6, 0.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -441,7 +518,7 @@ class RoutingAviary(BaseAviary):
                         physicsClientId=self.CLIENT)) 
             
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [2, 8.5, 2.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -449,27 +526,27 @@ class RoutingAviary(BaseAviary):
                         physicsClientId=self.CLIENT)) 
             
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [0.8, 7, 0], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT))    
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
-                        [1, 4, 0], 
+                        [2, 3.5, 0], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
             
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [2.5, 4, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
                         useFixedBase = True, 
                         physicsClientId=self.CLIENT)) 
-            RoutingAviary.OBSTACLE_IDS.append(
+            RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf", 
                         [3.5, 4, 1.5], 
                         p.getQuaternionFromEuler([0,0,0]), 
@@ -479,8 +556,9 @@ class RoutingAviary(BaseAviary):
         # self._getObstaclesData()
     ################################################################################
     
+    
     def _detectCollision(self):
-       # print("Processing Collision Detection . . .")
+    #    print("Processing Collision Detection . . .")
        for i in range(self.NUM_DRONES):
            self.CONTACT_POINTS[i] = p.getContactPoints(self.DRONE_IDS[i])
  
@@ -493,6 +571,7 @@ class RoutingAviary(BaseAviary):
     ################################################################################   
  
     def _getObstaclesData(self):
+        print("Getting obstacle data . . .")
         idsList = RoutingAviary.OBSTACLE_IDS
         # idsList = list(self.DRONE_IDS) + idsList   # Include Drone's ids
         
@@ -500,18 +579,18 @@ class RoutingAviary(BaseAviary):
         observationRange = 1.5;  # [m] (to be matched with raycast range)
     
         # Store obstacles data
-        for j in range(len(idsList)):
+        for id in idsList:
      
-            pos, orn = p.getBasePositionAndOrientation(idsList[j])
-            vsd = p.getVisualShapeData(idsList[j])
+            pos, orn = p.getBasePositionAndOrientation(id)
+            vsd = p.getVisualShapeData(id)
             
-            self.OBSTACLE_DATA[str(idsList[j])] = {"position": pos,
+            self.OBSTACLE_DATA[str(id)] = {"position": pos,
                                                    "size": vsd[0][3]}
             
             for k in range(self.NUM_DRONES):
-                csp = p.getClosestPoints(self.DRONE_IDS[k], idsList[j], observationRange)
+                csp = p.getClosestPoints(self.DRONE_IDS[k], id, observationRange)
                 if len(csp)!=0:
-                    self.OBSTACLE_DATA[str(idsList[j])]["closestPoint"] = csp[0][5]
+                    self.OBSTACLE_DATA[str(id)]["closestPoint"] = csp[0][5]
             # for i in range(len(csp)):
             #     print(i, csp[i][5])
             
@@ -527,19 +606,26 @@ class RoutingAviary(BaseAviary):
  
     ################################################################################
     def _applyForceToObstacle(self):
-        # print("Applying forces")
+        
         # Apply force to object -> dynamic obstacles
         t = self.step_counter/2
-        altering_step = 40
+        # print(f"Applying forces. step_counter = {self.step_counter}")
+        # print(f"step_counter={t}")
+        altering_step = 120
         
         sign = 1 if (t // altering_step) % 2 == 0 else -1
         if len(self.OBSTACLE_IDS) != 0:
-            for j in self.OBSTACLE_IDS:
-                if j%2 == 0:
+            for id in self.OBSTACLE_IDS:
+                if id%2 == 0:
                     sign *= -1
-                p.changeDynamics(j, -1, linearDamping=2)
-                pos, orn = p.getBasePositionAndOrientation(j)
-                p.applyExternalForce(j, -1, [400*sign,sign,9.81], pos, flags=p.WORLD_FRAME)   
+                # p.changeDynamics(id, -1, linearDamping=2)
+                obj_info = p.getDynamicsInfo(id, -1)
+                mass = obj_info[0]
+                # print(f"Object #{id}: mass = {mass}")
+                pos, orn = p.getBasePositionAndOrientation(id)
+                p.applyExternalForce(id, -1, [2000*sign,0,-mass*9.81], pos, flags=p.WORLD_FRAME) 
+        else:
+            print("[ERROR] in RoutingAviary, No obstacles")  
                 
     
     ################################################################################
