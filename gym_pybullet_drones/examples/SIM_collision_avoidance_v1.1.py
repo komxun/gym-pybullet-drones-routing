@@ -143,7 +143,7 @@ def run(
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
         # ======Random Action!!=========
-        action = random.randint(0, 1)
+        action = random.randint(2, 3)
         # action = 1
 
         #### Step the simulation ###################################

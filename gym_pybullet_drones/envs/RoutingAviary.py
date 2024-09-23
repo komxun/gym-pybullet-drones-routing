@@ -611,9 +611,9 @@ class RoutingAviary(BaseAviary):
         t = self.step_counter/2
         # print(f"Applying forces. step_counter = {self.step_counter}")
         # print(f"step_counter={t}")
-        altering_step = 120
+        altering_step = 250
         
-        sign = 1 if (t // altering_step) % 2 == 0 else -1
+        sign = -1 if (t // altering_step) % 2 == 0 else 1
         if len(self.OBSTACLE_IDS) != 0:
             for id in self.OBSTACLE_IDS:
                 if id%2 == 0:
@@ -623,7 +623,7 @@ class RoutingAviary(BaseAviary):
                 mass = obj_info[0]
                 # print(f"Object #{id}: mass = {mass}")
                 pos, orn = p.getBasePositionAndOrientation(id)
-                p.applyExternalForce(id, -1, [2000*sign,0,-mass*9.81], pos, flags=p.WORLD_FRAME) 
+                p.applyExternalForce(id, -1, [50*sign,0,-mass*9.81], pos, flags=p.WORLD_FRAME) 
         else:
             print("[ERROR] in RoutingAviary, No obstacles")  
                 

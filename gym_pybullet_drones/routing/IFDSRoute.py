@@ -35,7 +35,7 @@ class IFDSRoute(BaseRouting):
         self.TARGET_THRESH = 0.1
         self.SIM_MODE = 2
         self.DT = 0.5  # 0.1  #0.5
-        self.TSIM = 50
+        self.TSIM = 10
         self.RTSIM = 200
         
         self.reset()

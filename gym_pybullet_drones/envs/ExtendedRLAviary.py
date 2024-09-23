@@ -126,7 +126,7 @@ class ExtendedRLAviary(RoutingAviary):
             size = 1
             for i in range(self.ACTION_BUFFER_SIZE):
                 self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-            return spaces.Discrete(2)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
                 size = 4
@@ -173,7 +173,7 @@ class ExtendedRLAviary(RoutingAviary):
         self.action_buffer.append(np.array([[float(action)]])) # Need to revise this to have N-number of drones
                                                         # (similar to [[discrete_act_lo] for i in range(self.NUM_DRONES)])])
         rpm = np.zeros((self.NUM_DRONES,4))
-        for k in range(1):
+        for k in range(1):  # k: num drone
             # Process action based on ACT_TYPE
             if self.ACT_TYPE == ActionType.AUTOROUTING:
                 state = self._getDroneStateVector(k)
@@ -214,12 +214,17 @@ class ExtendedRLAviary(RoutingAviary):
                 #     self.routing._setCommand(SpeedCommandFlag, "hover")    
                 
 
-                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -0.5)
+                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 if action ==0:
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
-                    
                 elif action ==1:
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
+                elif action ==2:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -2)
+                elif action ==3:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 2)
+                elif action==4:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                     
                 #     if self.routing.STAT:
                 #         print("Alert: no route found!--> following global route")
@@ -271,7 +276,7 @@ class ExtendedRLAviary(RoutingAviary):
             for i in range(self.ACTION_BUFFER_SIZE):
                 if self.ACT_TYPE == ActionType.AUTOROUTING:
                     discrete_act_lo = 0
-                    discrete_act_hi = 1
+                    discrete_act_hi = 4
                     obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(self.NUM_DRONES)])])
                     obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(self.NUM_DRONES)])])
                 else:

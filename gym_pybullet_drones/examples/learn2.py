@@ -189,7 +189,7 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     obs, info = test_env.reset(seed=42)
     
     start = time.time()
-    for i in range(0, (test_env.EPISODE_LEN_SEC+2)*test_env.CTRL_FREQ):
+    for i in range(0, (test_env.EPISODE_LEN_SEC+30)*test_env.CTRL_FREQ):
         
         action, _states = model.predict(obs,
                                         deterministic=True
