@@ -94,6 +94,10 @@ class BaseRouting(object):
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
         self.DETECTED_OBS_DATA = {}
+
+        self.NUM_RAYS = 200
+        self.RAYS_INFO = np.zeros(1000,)
+        
         
         
         self.reset()
@@ -427,7 +431,7 @@ class BaseRouting(object):
         rayIds = []
         # numRays = 1024
         # numRays = 100
-        numRays = 200
+        numRays = self.NUM_RAYS
         rayLen = 1.5
         # rayLen = 4
         rayHitColor = [1, 0, 0]
@@ -447,6 +451,10 @@ class BaseRouting(object):
         rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
         # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
         results = p.rayTestBatch(rayFrom, rayTo)
+
+        # -- number of rays : check from len(results)
+        # -- results is a tuple of tuples
+        self.RAYS_INFO = self._extractRayInfo(results)
         
         if (not replaceLines):
           p.removeAllUserDebugItems()
@@ -454,7 +462,7 @@ class BaseRouting(object):
             hitObjectUid = results[i][0]
             
             if (hitObjectUid < 0):
-                hitPosition = [0, 0, 0]
+                hitPosition = [float('inf'), float('inf'), float('inf')]
                 # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
             else:
                 # This case, no detection of other fellow UAVs
@@ -469,6 +477,27 @@ class BaseRouting(object):
         self.DETECTED_OBS_IDS = detected_obs_ids
 
     ################################################################################
+    def _extractRayInfo(self, rayResult):
+        """
+        Extract useful infomation from batch ray-casting to feed into agent observation
+
+        Args:
+            rayResult (tuple): tuple of tuples of raytest query returned from rayTestBatch
+                The rayResult should have the dimension of 5 x (number of rays)
+
+        Returns:
+            array (5 x Number of rays, 1)
+                Extracted information consisting of [hit_ids, hit_fraction, hit_pos_x, hit_pos_y, hit_pos_z] per ray
+        """
+
+        tempList = []
+        for result in rayResult:
+            hit_ids = result[0]
+            hit_fraction = result[2]
+            hit_pos = result[3]
+            tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
+        
+        return np.array(tempList)
     
     def _processDetection(self, obstacle_data):
         """

@@ -148,6 +148,7 @@ def run(
 
         #### Step the simulation ###################################
         obs, reward, terminated, truncated, info = env.step(action)
+        print(f"obs len = {len(obs[0])}")
         print(f"truncated = {truncated}")
         
         #### Log the simulation ####################################
