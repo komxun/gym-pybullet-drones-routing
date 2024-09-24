@@ -81,6 +81,7 @@ class ExtendedRLAviary(RoutingAviary):
         vision_attributes = True if obs == ObservationType.RGB else False
         self.OBS_TYPE = obs
         self.ACT_TYPE = act
+        self.COMPUTE_DONE = False
         #### Create integrated controllers #########################
         if act in [ActionType.PID, ActionType.VEL, ActionType.ONE_D_PID, ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -96,7 +97,7 @@ class ExtendedRLAviary(RoutingAviary):
 
         #### Create a buffer for the last .5 sec of Sensors ########
         self.SENSOR_BUFFER_SIZE = int(ctrl_freq//2)  # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
-        # self.SENSOR_BUFFER_SIZE = 2   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
+        # self.SENSOR_BUFFER_SIZE = 1   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
         self.sensor_buffer = deque(maxlen=self.SENSOR_BUFFER_SIZE)
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
@@ -131,7 +132,7 @@ class ExtendedRLAviary(RoutingAviary):
             size = 1
             for i in range(self.ACTION_BUFFER_SIZE):
                 self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-            return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(3)  # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
                 size = 4
@@ -202,33 +203,28 @@ class ExtendedRLAviary(RoutingAviary):
                         print("Calculating Global Route . . .")
                         self.routing[k].setGlobalRoute(path)
                     else:
-                        raise ValueError("[Error] Global route was not found. Mission aborted.")
-                # if action == 0:  # Constant Vel
-                #     self.routing._setCommand(SpeedCommandFlag, "accelerate", 0)
-                # elif action == 1:  # Accelerate
-                #     # self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
-                #     self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.1)
-                # elif action == 2:  # Decelerate
-                #     # self.routing._setCommand(SpeedCommandFlag, "accelerate", -0.06)
-                #     self.routing._setCommand(SpeedCommandFlag, "accelerate", -2)
-                # elif action == 3:  # Stop (Hover)
-                #     self.routing._setCommand(RouteCommandFlag, "follow_global")
-                # elif action == 4:  # Stop (Hover)
-                #     self.routing._setCommand(RouteCommandFlag, "follow_local")
-                # elif action == 5:  # Change Route
-                #     self.routing._setCommand(SpeedCommandFlag, "hover")    
-                
+                        raise ValueError("[Error] Global route was not found. Mission aborted.")        
 
-                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                # ==== PASSIVE BEHAVIOUR ======
+                # self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+
+                # if action ==0:
+                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                # elif action ==1:
+                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
+                # elif action ==2:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -2)
+                # elif action ==3:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)
+                # elif action==4:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+
                 if action ==0:
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 elif action ==1:
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
-                elif action ==2:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -2)
-                elif action ==3:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 2)
-                elif action==4:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                elif action==2:
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                     
                 #     if self.routing.STAT:
@@ -283,7 +279,7 @@ class ExtendedRLAviary(RoutingAviary):
             for i in range(self.ACTION_BUFFER_SIZE):
                 if self.ACT_TYPE == ActionType.AUTOROUTING:
                     discrete_act_lo = 0
-                    discrete_act_hi = 4
+                    discrete_act_hi = 2
                     obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(self.NUM_DRONES)])])
                     obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(self.NUM_DRONES)])])
                     

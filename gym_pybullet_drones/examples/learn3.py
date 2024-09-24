@@ -22,6 +22,7 @@ import argparse
 import gymnasium as gym
 import numpy as np
 import torch
+import zipfile
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
@@ -31,10 +32,8 @@ from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
 from gym_pybullet_drones.envs.MultiHoverAviary import MultiHoverAviary
-from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
-from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.utils.utils import sync, str2bool
-from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics, DroneModel
+from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics
 
 DEFAULT_GUI = True
 DEFAULT_RECORD_VIDEO = False
@@ -45,9 +44,12 @@ DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
 DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
 DEFAULT_AGENTS = 1
 DEFAULT_MA = False
-DEFAULT_DRONES = DroneModel("cf2x")
 DEFAULT_PHYSICS = Physics("pyb")
-DEFAULT_CONTROL_FREQ_HZ = 240
+DEFAULT_CONTROL_FREQ_HZ = 60
+DEFAULT_SIMULATION_FREQ_HZ = 60
+
+INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(DEFAULT_AGENTS)])
+INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAULT_AGENTS)])
 
 def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_GUI, plot=True, colab=DEFAULT_COLAB, record_video=DEFAULT_RECORD_VIDEO, local=True):
 
@@ -56,18 +58,24 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
         os.makedirs(filename+'/')
 
     if not multiagent:
-        # train_env = make_vec_env(HoverAviary,
-        #                          env_kwargs=dict(obs=DEFAULT_OBS, act=DEFAULT_ACT),
-        #                          n_envs=1,
-        #                          seed=0
-        #                          )
-        # eval_env = HoverAviary(obs=DEFAULT_OBS, act=DEFAULT_ACT)
         train_env = make_vec_env(AutoroutingRLAviary,
-                                 env_kwargs=dict(obs=DEFAULT_OBS, act=DEFAULT_ACT, physics=DEFAULT_PHYSICS, ctrl_freq = DEFAULT_CONTROL_FREQ_HZ),
+                                 env_kwargs=dict(obs=DEFAULT_OBS, 
+                                                 act=DEFAULT_ACT, 
+                                                 physics=DEFAULT_PHYSICS, 
+                                                 ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
+                                                 pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                                                 initial_xyzs=INIT_XYZS,
+                                                 initial_rpys=INIT_RPYS),
                                  n_envs=1,
                                  seed=0
                                  )
-        eval_env = AutoroutingRLAviary(obs=DEFAULT_OBS, act=DEFAULT_ACT, physics=DEFAULT_PHYSICS, ctrl_freq = DEFAULT_CONTROL_FREQ_HZ)
+        eval_env = AutoroutingRLAviary(obs=DEFAULT_OBS, 
+                                       act=DEFAULT_ACT, 
+                                       physics=DEFAULT_PHYSICS, 
+                                       ctrl_freq = DEFAULT_CONTROL_FREQ_HZ,
+                                       pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                                       initial_xyzs=INIT_XYZS,
+                                       initial_rpys=INIT_RPYS)
     else:
         train_env = make_vec_env(MultiHoverAviary,
                                  env_kwargs=dict(num_drones=DEFAULT_AGENTS, obs=DEFAULT_OBS, act=DEFAULT_ACT),
@@ -80,17 +88,16 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
 
-    #### Train the model #######################################
-    model = PPO('MlpPolicy',
-                train_env,
-                # tensorboard_log=filename+'/tb/',
-                verbose=1)
+    # Load the model from the file
+    model_path = "results/save-09.24.2024_18.04.41/final_model.zip"
+    model = PPO.load(model_path, env=train_env)  # Load the model and attach the environment
 
     #### Target cumulative rewards (problem-dependent) ##########
     if DEFAULT_ACT == ActionType.ONE_D_RPM:
         target_reward = 474.15 if not multiagent else 949.5
     else:
-        target_reward = -100. if not multiagent else -200.
+        target_reach_time_s = 10
+        target_reward = 0 if not multiagent else 920.
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=target_reward,
                                                      verbose=1)
     eval_callback = EvalCallback(eval_env,
@@ -104,7 +111,7 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     # model.learn(total_timesteps=int(1e7) if local else int(1e2), # shorter training in GitHub Actions pytest
     #             callback=eval_callback,
     #             log_interval=100)
-    model.learn(total_timesteps=int(1e4) if local else int(1e2), # shorter training in GitHub Actions pytest
+    model.learn(total_timesteps=int(2e4) if local else int(1e2), # shorter training in GitHub Actions pytest
                 callback=eval_callback,
                 log_interval=100)
 
@@ -133,16 +140,27 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     else:
         print("[ERROR]: no model under the specified path", filename)
     model = PPO.load(path)
-
+    train_env.close()
+    eval_env.close()    
     #### Show (and record a video of) the model's performance ##
     if not multiagent:
-        test_env = AutoroutingRLAviary(gui=gui,
-                               obs=DEFAULT_OBS,
-                               act=DEFAULT_ACT,
-                               record=record_video,
-                               physics=DEFAULT_PHYSICS, 
-                               ctrl_freq = DEFAULT_CONTROL_FREQ_HZ)
-        test_env_nogui = AutoroutingRLAviary(obs=DEFAULT_OBS, act=DEFAULT_ACT, physics=DEFAULT_PHYSICS, ctrl_freq = DEFAULT_CONTROL_FREQ_HZ)
+        print("========= Testing for Single agent (no GUI) ============")
+        # test_env = AutoroutingRLAviary(gui=gui,
+        #                        obs=DEFAULT_OBS,
+        #                        act=DEFAULT_ACT,
+        #                        physics=DEFAULT_PHYSICS, 
+        #                        ctrl_freq = DEFAULT_CONTROL_FREQ_HZ,
+        #                        pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+        #                        initial_xyzs=INIT_XYZS,
+        #                         initial_rpys=INIT_RPYS,)
+        test_env_nogui = AutoroutingRLAviary(gui =False,
+                                             obs=DEFAULT_OBS, 
+                                             act=DEFAULT_ACT, 
+                                             physics=DEFAULT_PHYSICS, 
+                                             ctrl_freq = DEFAULT_CONTROL_FREQ_HZ,
+                                             pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                                             initial_xyzs=INIT_XYZS,
+                                                initial_rpys=INIT_RPYS,)
     else:
         test_env = MultiHoverAviary(gui=gui,
                                         num_drones=DEFAULT_AGENTS,
@@ -150,99 +168,75 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
                                         act=DEFAULT_ACT,
                                         record=record_video)
         test_env_nogui = MultiHoverAviary(num_drones=DEFAULT_AGENTS, obs=DEFAULT_OBS, act=DEFAULT_ACT)
-
-    #++++ Initialize the logger +++++++++++++++++++++++++++++++++
-    logger = Logger(logging_freq_hz=int(test_env.CTRL_FREQ),
-                num_drones=DEFAULT_AGENTS if multiagent else 1,
-                output_folder=output_folder,
-                colab=colab
-                )
-    #++++ Initialize the controllers ++++++++++++++++++++++++++++
-    ctrl = [DSLPIDControl(drone_model=DEFAULT_DRONES) for i in range(DEFAULT_AGENTS)]
-        
-    #++++ Initialize Routing ++++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=DEFAULT_DRONES) for i in range(DEFAULT_AGENTS)]
-    routeCounter = 1
+    
 
     mean_reward, std_reward = evaluate_policy(model,
                                               test_env_nogui,
                                               n_eval_episodes=10
                                               )
     print("\n\n\nMean reward ", mean_reward, " +- ", std_reward, "\n\n")
+    test_env_nogui.close()  
+    input("Press Enter to continue...")
+    test_env = AutoroutingRLAviary(gui=gui,
+                               obs=DEFAULT_OBS,
+                               act=DEFAULT_ACT,
+                               physics=DEFAULT_PHYSICS, 
+                               ctrl_freq = DEFAULT_CONTROL_FREQ_HZ,
+                               pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                               initial_xyzs=INIT_XYZS,
+                                initial_rpys=INIT_RPYS,)
+    
+    logger = Logger(logging_freq_hz=int(test_env.CTRL_FREQ),
+                num_drones=DEFAULT_AGENTS if multiagent else 1,
+                output_folder=output_folder,
+                colab=colab
+                )
 
-    obs, info = test_env.reset(seed=42, options={})
+    
+    obs, info = test_env.reset(seed=42)
+    
     start = time.time()
-    for i in range((test_env.EPISODE_LEN_SEC+2)*test_env.CTRL_FREQ):
+    for i in range(0, (test_env.EPISODE_LEN_SEC+30)*test_env.CTRL_FREQ):
+        
         action, _states = model.predict(obs,
                                         deterministic=True
                                         )
+        
         obs, reward, terminated, truncated, info = test_env.step(action)
-        obs2 = obs.squeeze()
-        act2 = action.squeeze()
+        # obs2 = obs.squeeze()
+        # act2 = action.squeeze()
         print("Obs:", obs, "\tAction", action, "\tReward:", reward, "\tTerminated:", terminated, "\tTruncated:", truncated)
-
-        #### Compute control for the current way point #############
-        for j in range(DEFAULT_AGENTS):
-            
-            #------- Compute route (waypoint) to follow ----------------
-            foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
-                                                  state = obs[j], 
-                                                  home_pos = np.array((0,0,0)), 
-                                                  target_pos = np.array((((-1)**j)*(j*0.2), 12, 0.5)),
-                                                  speed_limit = test_env.SPEED_LIMIT,
-                                                  obstacle_data = test_env.OBSTACLE_DATA,
-                                                  drone_ids = test_env.DRONE_IDS
-                                                  )
-            
-            if foundPath>0:
-                routeCounter+=1
-                if routeCounter==2:
-                    routing[j].setGlobalRoute(path)
-        
-            # routing[j]._setCommand(SpeedCommandFlag, "accelerate", 0)
-            # routing[j]._setCommand(RouteCommandFlag, "follow_local")
-            
-            
-            actionx, _, _ = ctrl[j].computeControlFromState(control_timestep=test_env.CTRL_TIMESTEP,
-                                                                    state=obs[j],
-                                                                    target_pos=routing[j].TARGET_POS,
-                                                                    target_rpy=test_env.INIT_RPYS[j, :],
-                                                                    target_vel = routing[j].TARGET_VEL
-                                                                    )
-        
-
-
-        if DEFAULT_OBS == ObservationType.KIN:
-            if not multiagent:
-                logger.log(drone=0,
-                    timestamp=i/test_env.CTRL_FREQ,
-                    state=np.hstack([obs2[0:3],
-                                        np.zeros(4),
-                                        obs2[3:15],
-                                        act2
-                                        ]),
-                    control=np.zeros(12)
-                    )
-            else:
-                for d in range(DEFAULT_AGENTS):
-                    logger.log(drone=d,
-                        timestamp=i/test_env.CTRL_FREQ,
-                        state=np.hstack([obs2[d][0:3],
-                                            np.zeros(4),
-                                            obs2[d][3:15],
-                                            act2[d]
-                                            ]),
-                        control=np.zeros(12)
-                        )
+        # if DEFAULT_OBS == ObservationType.KIN:
+        #     if not multiagent:
+        #         logger.log(drone=0,
+        #             timestamp=i/test_env.CTRL_FREQ,
+        #             state=np.hstack([obs2[0:3],
+        #                                 np.zeros(4),
+        #                                 obs2[3:15],
+        #                                 act2
+        #                                 ]),
+        #             control=np.zeros(12)
+        #             )
+        #     else:
+        #         for d in range(DEFAULT_AGENTS):
+        #             logger.log(drone=d,
+        #                 timestamp=i/test_env.CTRL_FREQ,
+        #                 state=np.hstack([obs2[d][0:3],
+        #                                     np.zeros(4),
+        #                                     obs2[d][3:15],
+        #                                     act2[d]
+        #                                     ]),
+        #                 control=np.zeros(12)
+        #                 )
         test_env.render()
-        print(terminated)
+        print(f"terminated = {terminated}")
         sync(i, start, test_env.CTRL_TIMESTEP)
-        if terminated:
-            obs = test_env.reset(seed=42, options={})
+        if terminated or truncated:
+            obs, _  = test_env.reset(seed=42)
     test_env.close()
 
-    if plot and DEFAULT_OBS == ObservationType.KIN:
-        logger.plot()
+    # if plot and DEFAULT_OBS == ObservationType.KIN:
+    #     logger.plot()
 
 if __name__ == '__main__':
     #### Define and parse (optional) arguments for the script ##

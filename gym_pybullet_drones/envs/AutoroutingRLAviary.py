@@ -74,23 +74,86 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             The reward.
 
         """
+        
         state = self._getDroneStateVector(0)
         curPos = np.array(state[0:3])
         
         norm_ep_time = (self.step_counter/self.PYB_FREQ ) / self.EPISODE_LEN_SEC
         elapsed_time_sec = self.step_counter/self.PYB_FREQ
 
-        # reward = -10 * norm_ep_time* np.linalg.norm(np.array([0.2, 12, 1]).reshape(1,3) - curPos.reshape(1,3))**2
-        # ret = -10 * norm_ep_time
-        ret = -10 * elapsed_time_sec * np.linalg.norm(np.array([0.2, 12, 1]).reshape(1,3) - curPos.reshape(1,3))**2
-        # reward = -10 * norm_ep_time
-        if int(self.CONTACT_FLAGS[0]) == 1:
-            # reward -= 10000
-            # ret -= -1e3
-            ret *= 2
-            print(f"Penalty due to collision: reward = {ret}")
-        # print("Reward = " + str(reward))
-        # ret = max(0, 2 - np.linalg.norm(self.TARGET_POS-state[0:3])**4)
+        # ---------Reward design-------------
+        reachThreshold_m = 0.2
+        reward_choice = 4
+        
+        if reward_choice == 1:
+            # Initialize reward
+            ret = 0 
+            
+            # Check if the UAV reached the goal
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                ret += 500
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                # print("- penalty from collision")
+                ret -= 100
+                # self.COMPUTE_DONE = True
+            ret -= 10
+        elif reward_choice ==2:
+            ret = -10 * elapsed_time_sec * np.linalg.norm(np.array([0.2, 12, 1]).reshape(1,3) - curPos.reshape(1,3))**2
+            
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                ret *= 2
+                print(f"Penalty due to collision: reward = {ret}")
+            # print("Reward = " + str(reward))
+            # ret = max(0, 2 - np.linalg.norm(self.TARGET_POS-state[0:3])**4)
+        elif reward_choice ==3:
+            
+            d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])**2
+            h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)**2
+            step_cost = d2destin
+            desire_reach_time_s = 5
+            # destin_reward = desire_reach_time_s * self.PYB_FREQ * step_cost
+            destin_reward = desire_reach_time_s * self.PYB_FREQ * h2destin
+            ret = 0
+            ret -= step_cost
+
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                print("====== Reached Destination!!! ======")
+                ret += destin_reward
+
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                print("Collided!")
+                ret = -(destin_reward - self.step_counter*step_cost)
+        elif reward_choice ==4:
+            
+            d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
+            h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
+            step_cost = d2destin**1
+            # step_cost = 10
+            desire_reach_time_s = 10
+            min_num_step = desire_reach_time_s * self.PYB_FREQ
+
+            a_1 = reachThreshold_m
+            a_n = h2destin
+            n = desire_reach_time_s * self.PYB_FREQ
+
+            d2destin_vect = np.linspace(reachThreshold_m, h2destin, min_num_step)
+            stepCost_vect = d2destin_vect**1
+
+            # destin_reward = desire_reach_time_s * self.PYB_FREQ * step_cost
+            destin_reward = sum(stepCost_vect)
+            # print(f"destin reward = {destin_reward}")
+            ret = 0
+            ret -= step_cost
+
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                print("====== Reached Destination!!! ======")
+                ret += destin_reward
+
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                print("Collided!")
+                ret = -(destin_reward - self.step_counter*step_cost)
+        
+            
 
         return ret
 
@@ -116,6 +179,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
         elif int(self.CONTACT_FLAGS[0]) == 1:
             return True
         else:
+            self.COMPUTE_DONE = False
             return False
         
     ################################################################################
@@ -134,13 +198,13 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
         # Truncate when the drone collides
         # if int(self.CONTACT_FLAGS[0]) == 1:
-        #     print(f"Ayooo it collides!!!")
+        #     # print(f"Ayooo it collides!!!")
         #     return True
         
-        if (abs(state[0]) > mapBorderXYZ[0] or abs(state[1]) > mapBorderXYZ[1] or state[2] > mapBorderXYZ[2] # Truncate when the drone is too far away
-             or abs(state[7]) > .4 or abs(state[8]) > .4 # Truncate when the drone is too tilted
-        ):
-            return True
+        # if (abs(state[0]) > mapBorderXYZ[0] or abs(state[1]) > mapBorderXYZ[1] or state[2] > mapBorderXYZ[2] # Truncate when the drone is too far away
+        #      or abs(state[7]) > .4 or abs(state[8]) > .4 # Truncate when the drone is too tilted
+        # ):
+        #     return True
         if self.step_counter/self.PYB_FREQ > self.EPISODE_LEN_SEC:
             return True
         else:
