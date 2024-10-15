@@ -27,6 +27,13 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 from stable_baselines3.common.evaluation import evaluate_policy
 
+from gym_pybullet_drones.drl_custom import DQN
+from gym_pybullet_drones.drl_custom.networks import FCQ
+from gym_pybullet_drones.drl_custom.exploration_strategies import EGreedyExpStrategy, GreedyStrategy
+
+
+import torch.optim as optim
+
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
@@ -82,6 +89,17 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
                                  seed=0
                                  )
         eval_env = MultiHoverAviary(num_drones=DEFAULT_AGENTS, obs=DEFAULT_OBS, act=DEFAULT_ACT)
+
+
+    # ++++++++ Custom +++++++++
+    value_model_fn = lambda nS, nA: FCQ(nS, nA, hidden_dims=(512,128))
+    value_optimizer_fn = lambda net, lr: optim.RMSprop(net.parameters(), lr=lr)
+    value_optimizer_lr = 0.0005
+    training_strategy_fn = lambda: EGreedyExpStrategy(init_epsilon=1.0,  
+                                                      min_epsilon=0.3, 
+                                                      decay_steps=20000)
+    evaluation_strategy_fn = lambda: GreedyStrategy()
+
 
     #### Check the environment's spaces ########################
     print('[INFO] Action space:', train_env.action_space)

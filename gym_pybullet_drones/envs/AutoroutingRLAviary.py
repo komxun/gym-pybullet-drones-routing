@@ -83,7 +83,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.2
-        reward_choice = 4
+        reward_choice = 6
         
         if reward_choice == 1:
             # Initialize reward
@@ -127,20 +127,20 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             
             d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
             h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
-            step_cost = d2destin**1
-            # step_cost = 10
+            # step_cost = d2destin**1
+            step_cost = 10
             desire_reach_time_s = 10
-            min_num_step = desire_reach_time_s * self.PYB_FREQ
+            desire_num_step = desire_reach_time_s * self.PYB_FREQ
 
             a_1 = reachThreshold_m
             a_n = h2destin
             n = desire_reach_time_s * self.PYB_FREQ
 
-            d2destin_vect = np.linspace(reachThreshold_m, h2destin, min_num_step)
+            d2destin_vect = np.linspace(reachThreshold_m, h2destin, desire_num_step)
             stepCost_vect = d2destin_vect**1
 
-            # destin_reward = desire_reach_time_s * self.PYB_FREQ * step_cost
-            destin_reward = sum(stepCost_vect)
+            destin_reward = desire_reach_time_s * self.PYB_FREQ * step_cost
+            # destin_reward = sum(stepCost_vect)
             # print(f"destin reward = {destin_reward}")
             ret = 0
             ret -= step_cost
@@ -151,8 +151,69 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
             if int(self.CONTACT_FLAGS[0]) == 1:
                 print("Collided!")
-                ret = -(destin_reward - self.step_counter*step_cost)
-        
+                # ret = -(destin_reward - self.step_counter*step_cost)
+                ret -= d2destin
+                # ret -= abs(desire_num_step - self.step_counter)*step_cost
+        elif reward_choice ==5:
+            d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
+            h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
+            # step_cost = d2destin**1
+            
+            step_cost = self.step_counter
+            desire_reach_time_s = 10
+            desire_num_step = desire_reach_time_s * self.PYB_FREQ
+            ret = desire_num_step - self.step_counter
+
+            d2destin_vect = np.linspace(reachThreshold_m, h2destin, desire_num_step)
+            stepCost_vect = d2destin_vect**1
+
+            destin_reward = desire_num_step
+            # destin_reward = sum(stepCost_vect)
+            # print(f"destin reward = {destin_reward}")
+            
+            ret -= step_cost
+
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                print("====== Reached Destination!!! ======")
+                ret += destin_reward
+
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                print("Collided!")
+                ret -= d2destin/h2destin * 10*desire_num_step
+            # print(f"reward = {ret}")
+        elif reward_choice == 6:
+            d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
+            h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
+            # step_cost = d2destin**1
+            
+            step_cost = d2destin/h2destin
+            desire_reach_time_s = 10
+            desire_num_step = desire_reach_time_s * self.PYB_FREQ
+            ret = 0
+            # print(f"d2d = {d2destin}")
+            # print(f"h2d = {h2destin}")
+
+            d2destin_vect = np.linspace(reachThreshold_m, h2destin, desire_num_step)
+            stepCost_vect = d2destin_vect/h2destin
+
+            # destin_reward = desire_num_step
+            collide_reward = 2*step_cost
+            destin_reward = sum(stepCost_vect)
+            # print(f"destin reward = {destin_reward}")
+            
+            ret -= step_cost
+
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                print("====== Reached Destination!!! ======")
+                ret += destin_reward
+
+            if int(self.CONTACT_FLAGS[0]) == 1:
+                print("Collided!")
+                ret -= collide_reward
+    
+            # print(f"reward = {ret}")
+    
+
             
 
         return ret

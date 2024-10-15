@@ -96,8 +96,8 @@ class ExtendedRLAviary(RoutingAviary):
                 print("[ERROR] in BaseRLAviary.__init()__, no controller is available for the specified drone_model")
 
         #### Create a buffer for the last .5 sec of Sensors ########
-        self.SENSOR_BUFFER_SIZE = int(ctrl_freq//2)  # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
-        # self.SENSOR_BUFFER_SIZE = 1   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
+        # self.SENSOR_BUFFER_SIZE = int(ctrl_freq//2)  # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
+        self.SENSOR_BUFFER_SIZE = 2   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
         self.sensor_buffer = deque(maxlen=self.SENSOR_BUFFER_SIZE)
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
@@ -296,6 +296,9 @@ class ExtendedRLAviary(RoutingAviary):
             
             ray_lo = np.tile([-1 ,0, -np.inf, -np.inf, -np.inf], self.routing[0].NUM_RAYS)
             ray_hi = np.tile([np.inf ,1, np.inf, np.inf, np.inf], self.routing[0].NUM_RAYS)
+            # ++++++ Add distance-to-destination to observation space ++++++
+            obs_lower_bound = np.hstack([obs_lower_bound, np.array([[0] for i in range(self.NUM_DRONES)])])
+            obs_upper_bound = np.hstack([obs_upper_bound, np.array([[np.inf] for i in range(self.NUM_DRONES)])])
            
             for _ in range(self.SENSOR_BUFFER_SIZE):
                 self.sensor_buffer.append(np.zeros((self.NUM_DRONES, 5*self.routing[0].NUM_RAYS))) # 5: info from rayCast
@@ -341,6 +344,7 @@ class ExtendedRLAviary(RoutingAviary):
             for i in range(self.NUM_DRONES):
                 #obs = self._clipAndNormalizeState(self._getDroneStateVector(i))
                 obs = self._getDroneStateVector(i)
+                # (x, y, z, R, P, Y, vx, vy, vz, wx, wy,)
                 obs_12[i, :] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
                 self.sensor_buffer.append(np.array([list(self.routing[i].RAYS_INFO)])) 
                 
@@ -348,6 +352,10 @@ class ExtendedRLAviary(RoutingAviary):
             #### Add action buffer to observation #######################
             for i in range(self.ACTION_BUFFER_SIZE):
                 ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
+         
+            # #++++++ Add distance-to-destination +++++++++++++++++++++++++
+            ret = np.hstack([ret, np.array([[self.routing[i].getDistanceToDestin()] for i in range(self.NUM_DRONES)])])
+          
             # #++++++ Add sensor buffer to observation  +++++++++++++++++++
             for i in range(self.SENSOR_BUFFER_SIZE):
                 ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])])

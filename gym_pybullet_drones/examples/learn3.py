@@ -89,7 +89,7 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     print('[INFO] Observation space:', train_env.observation_space)
 
     # Load the model from the file
-    model_path = "results/save-09.24.2024_18.04.41/final_model.zip"
+    model_path = "results/save-09.26.2024_15.41.28/best_model.zip"
     model = PPO.load(model_path, env=train_env)  # Load the model and attach the environment
 
     #### Target cumulative rewards (problem-dependent) ##########
@@ -111,7 +111,7 @@ def run(multiagent=DEFAULT_MA, output_folder=DEFAULT_OUTPUT_FOLDER, gui=DEFAULT_
     # model.learn(total_timesteps=int(1e7) if local else int(1e2), # shorter training in GitHub Actions pytest
     #             callback=eval_callback,
     #             log_interval=100)
-    model.learn(total_timesteps=int(2e4) if local else int(1e2), # shorter training in GitHub Actions pytest
+    model.learn(total_timesteps=int(1e4) if local else int(1e2), # shorter training in GitHub Actions pytest
                 callback=eval_callback,
                 log_interval=100)
 
