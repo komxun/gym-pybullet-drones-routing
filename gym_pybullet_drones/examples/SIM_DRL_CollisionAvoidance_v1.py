@@ -120,11 +120,11 @@ def run(
     PYB_CLIENT = env.getPyBulletClient()
 
     #### Initialize the logger #################################
-    # logger = Logger(logging_freq_hz=control_freq_hz,
-    #                 num_drones=num_drones,
-    #                 output_folder=output_folder,
-    #                 colab=colab
-    #                 )
+    logger = Logger(logging_freq_hz=control_freq_hz,
+                    num_drones=num_drones,
+                    output_folder=output_folder,
+                    colab=colab
+                    )
 
     #### Initialize the controllers ############################
     if drone in [DroneModel.CF2X, DroneModel.CF2P]:
@@ -143,13 +143,13 @@ def run(
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
         # ======Random Action!!=========
-        action = random.randint(1, 4)
+        action = random.randint(0, 1)
         # action = 1
 
         #### Step the simulation ###################################
         obs, reward, terminated, truncated, info = env.step(action)
         # print(f"obs len = {len(obs[0])}")
-        print(f"truncated = {truncated}")
+        # print(f"truncated = {truncated}")
         
         #### Log the simulation ####################################
         # for j in range(num_drones):

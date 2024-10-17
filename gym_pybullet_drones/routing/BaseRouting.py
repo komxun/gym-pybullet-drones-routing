@@ -5,6 +5,7 @@ import pkg_resources
 from enum import Enum
 import pybullet as p
 
+
 from gym_pybullet_drones.utils.enums import DroneModel
 
 class RouteStatus(Enum):
@@ -426,6 +427,7 @@ class BaseRouting(object):
         """
         # rayFrom = self.CUR_POS
         # p.removeAllUserDebugItems()
+
         detected_obs_ids = []
         rayTo = []
         rayIds = []
@@ -437,7 +439,7 @@ class BaseRouting(object):
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]
 
-        replaceLines = True
+        replaceLines = False
 
         # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
         indices = np.arange(0, numRays, dtype=float) + 0.5
@@ -456,8 +458,8 @@ class BaseRouting(object):
         # -- results is a tuple of tuples
         self.RAYS_INFO = self._extractRayInfo(results)
         
-        if (not replaceLines):
-          p.removeAllUserDebugItems()
+        # if (not replaceLines):
+        #   p.removeAllUserDebugItems()
         for i in range(numRays):
             hitObjectUid = results[i][0]
             
@@ -470,9 +472,9 @@ class BaseRouting(object):
                 # if hitObjectUid!=0:
                     detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
                     hitPosition = results[i][3]
-                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
                     
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2,lifeTime=0.1)
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1,lifeTime=0.1)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
 

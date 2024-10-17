@@ -14,6 +14,7 @@ import pybullet_data
 import gymnasium as gym
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ImageType
 
+komsunWantsPrint = False
 
 class BaseAviary(gym.Env):
     """Base class for "drone aviary" Gym environments."""
@@ -70,6 +71,7 @@ class BaseAviary(gym.Env):
             Whether to allocate the attributes needed by vision-based aviary subclasses.
 
         """
+        
         #### Constants #############################################
         self.G = 9.8
         self.RAD2DEG = 180/np.pi
@@ -148,6 +150,7 @@ class BaseAviary(gym.Env):
         if self.GUI:
             #### With debug GUI ########################################
             self.CLIENT = p.connect(p.GUI) # p.connect(p.GUI, options="--opengl2")
+            # self.CLIENT =p.connect(p.GUI, options="--opengl2")
             for i in [p.COV_ENABLE_RGB_BUFFER_PREVIEW, p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW]:
                 p.configureDebugVisualizer(i, 0, physicsClientId=self.CLIENT)
             p.resetDebugVisualizerCamera(cameraDistance=3,

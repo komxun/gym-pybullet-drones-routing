@@ -74,7 +74,8 @@ class ExtendedRLAviary(RoutingAviary):
         # =============================================================================
 
         #### Create a buffer for the last .5 sec of actions ########
-        self.ACTION_BUFFER_SIZE = int(ctrl_freq//2)
+        # self.ACTION_BUFFER_SIZE = int(ctrl_freq//2)
+        self.ACTION_BUFFER_SIZE = 0
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
         
         ####
@@ -97,7 +98,8 @@ class ExtendedRLAviary(RoutingAviary):
 
         #### Create a buffer for the last .5 sec of Sensors ########
         # self.SENSOR_BUFFER_SIZE = int(ctrl_freq//2)  # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
-        self.SENSOR_BUFFER_SIZE = 2   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
+        # self.SENSOR_BUFFER_SIZE = 2   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
+        self.SENSOR_BUFFER_SIZE = 1   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
         self.sensor_buffer = deque(maxlen=self.SENSOR_BUFFER_SIZE)
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
@@ -132,7 +134,7 @@ class ExtendedRLAviary(RoutingAviary):
             size = 1
             for i in range(self.ACTION_BUFFER_SIZE):
                 self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-            return spaces.Discrete(3)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
                 size = 4
@@ -207,25 +209,26 @@ class ExtendedRLAviary(RoutingAviary):
 
                 # ==== PASSIVE BEHAVIOUR ======
                 # self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
-                self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
-
-                # if action ==0:
-                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
-                # elif action ==1:
-                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
-                # elif action ==2:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -2)
-                # elif action ==3:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)
-                # elif action==4:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+                
 
                 if action ==0:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
                 elif action ==1:
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
+                elif action ==2:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                elif action ==3:
                     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
-                elif action==2:
+                elif action==4:
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+                
+                # self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                # if action ==0:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                # elif action ==1:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                # elif action==2:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                     
                 #     if self.routing.STAT:
                 #         print("Alert: no route found!--> following global route")
@@ -279,7 +282,7 @@ class ExtendedRLAviary(RoutingAviary):
             for i in range(self.ACTION_BUFFER_SIZE):
                 if self.ACT_TYPE == ActionType.AUTOROUTING:
                     discrete_act_lo = 0
-                    discrete_act_hi = 2
+                    discrete_act_hi = 4
                     obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(self.NUM_DRONES)])])
                     obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(self.NUM_DRONES)])])
                     
@@ -308,6 +311,9 @@ class ExtendedRLAviary(RoutingAviary):
                 obs_lower_bound = np.hstack([obs_lower_bound, np.array([list(ray_lo) for _ in range(self.NUM_DRONES)])])
                 obs_upper_bound = np.hstack([obs_upper_bound, np.array([list(ray_hi) for _ in range(self.NUM_DRONES)])])
             ############################################################
+            # added 20241015
+            obs_lower_bound =  obs_lower_bound.reshape(obs_lower_bound.shape[1],)
+            obs_upper_bound =  obs_upper_bound.reshape(obs_upper_bound.shape[1],)
             return spaces.Box(low=obs_lower_bound, high=obs_upper_bound, dtype=np.float32)
         else:
             print("[ERROR] in BaseRLAviary._observationSpace()")
@@ -359,7 +365,7 @@ class ExtendedRLAviary(RoutingAviary):
             # #++++++ Add sensor buffer to observation  +++++++++++++++++++
             for i in range(self.SENSOR_BUFFER_SIZE):
                 ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
-            
+            ret = ret.reshape(ret.shape[1], ).astype('float32')
             return ret
             ############################################################
         else:

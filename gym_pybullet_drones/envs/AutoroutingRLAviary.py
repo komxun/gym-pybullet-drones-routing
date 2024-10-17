@@ -83,7 +83,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.2
-        reward_choice = 6
+        reward_choice = 4
         
         if reward_choice == 1:
             # Initialize reward
@@ -121,7 +121,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret += destin_reward
 
             if int(self.CONTACT_FLAGS[0]) == 1:
-                print("Collided!")
+                # print("Collided!")
                 ret = -(destin_reward - self.step_counter*step_cost)
         elif reward_choice ==4:
             
@@ -129,7 +129,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
             # step_cost = d2destin**1
             step_cost = 10
-            desire_reach_time_s = 10
+            desire_reach_time_s = 15
             desire_num_step = desire_reach_time_s * self.PYB_FREQ
 
             a_1 = reachThreshold_m
@@ -139,21 +139,26 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             d2destin_vect = np.linspace(reachThreshold_m, h2destin, desire_num_step)
             stepCost_vect = d2destin_vect**1
 
-            destin_reward = desire_reach_time_s * self.PYB_FREQ * step_cost
+            destin_reward = desire_num_step * step_cost
             # destin_reward = sum(stepCost_vect)
             # print(f"destin reward = {destin_reward}")
             ret = 0
             ret -= step_cost
 
             if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
-                print("====== Reached Destination!!! ======")
-                ret += destin_reward
+                
+                # ret += destin_reward
+                ret = destin_reward
+                print(f"\n====== Reached Destination!!! ====== ret = {ret}\n")
 
             if int(self.CONTACT_FLAGS[0]) == 1:
-                print("Collided!")
-                # ret = -(destin_reward - self.step_counter*step_cost)
-                ret -= d2destin
-                # ret -= abs(desire_num_step - self.step_counter)*step_cost
+                
+                # ret -= d2destin
+                ret = -d2destin
+
+
+
+                # print(f"Collided: ret = {ret}")
         elif reward_choice ==5:
             d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
             h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
@@ -208,7 +213,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret += destin_reward
 
             if int(self.CONTACT_FLAGS[0]) == 1:
-                print("Collided!")
+                # print("Collided!")
                 ret -= collide_reward
     
             # print(f"reward = {ret}")

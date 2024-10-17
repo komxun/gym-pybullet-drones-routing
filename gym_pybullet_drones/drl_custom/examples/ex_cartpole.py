@@ -9,7 +9,7 @@ from gym_pybullet_drones.drl_custom.exploration_strategies import EGreedyExpStra
 from gym_pybullet_drones.drl_custom.utils import get_make_env_fn
 
 from gym_pybullet_drones.drl_custom.DQN import DQN
-from gym_pybullet_drones.drl_custom.ReplayBuffer import ReplayBuffer
+from gym_pybullet_drones.drl_custom.replay_buffers.ReplayBuffer import ReplayBuffer
 
 
 LEAVE_PRINT_EVERY_N_SECS = 60

@@ -4,4 +4,4 @@ from gym_pybullet_drones.envs.HoverAviary import HoverAviary
 from gym_pybullet_drones.envs.MultiHoverAviary import MultiHoverAviary
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
-
+from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary

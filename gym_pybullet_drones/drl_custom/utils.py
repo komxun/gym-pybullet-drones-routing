@@ -1,21 +1,53 @@
 from gym_pybullet_drones.drl_custom.drl_imports import tempfile, gym, wrappers, np, base64, json, os, subprocess, io
 from gymnasium.wrappers import RecordVideo
+from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics
 def get_make_env_fn(**kargs):
     def make_env_fn(env_name, seed=None, render=None, record=False,
                     unwrapped=False, monitor_mode=None, 
                     inner_wrappers=None, outer_wrappers=None):
+        
+        DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
+        DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
+        DEFAULT_AGENTS = 1
+        DEFAULT_MA = False
+        DEFAULT_PHYSICS = Physics("pyb")
+        DEFAULT_CONTROL_FREQ_HZ = 60
+        DEFAULT_SIMULATION_FREQ_HZ = 60
+        INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(DEFAULT_AGENTS)])
+        INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAULT_AGENTS)])
+
+
         mdir = tempfile.mkdtemp()
         env = None
         if render:
             try:
                 print("Rendering")
-                env = gym.make(env_name, render_mode="rgb_array")
+                # env = gym.make(env_name, render_mode="rgb_array")
+                env = gym.make(env_name, gui=True, obs=DEFAULT_OBS, 
+                                                 act=DEFAULT_ACT, 
+                                                 physics=DEFAULT_PHYSICS, 
+                                                 ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
+                                                 pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                                                 initial_xyzs=INIT_XYZS,
+                                                 initial_rpys=INIT_RPYS)
                 # env.render()
             except:
                 pass
         if env is None:
             print("*** env is None")
-            env = gym.make(env_name)
+            DEFAULT_GUI = True
+            DEFAULT_RECORD_VIDEO = False
+            DEFAULT_OUTPUT_FOLDER = 'results'
+            DEFAULT_COLAB = False
+
+            
+            env = gym.make(env_name, gui=False, obs=DEFAULT_OBS, 
+                                                 act=DEFAULT_ACT, 
+                                                 physics=DEFAULT_PHYSICS, 
+                                                 ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
+                                                 pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
+                                                 initial_xyzs=INIT_XYZS,
+                                                 initial_rpys=INIT_RPYS)
         # if seed is not None: env.seed(seed)
         if seed is not None:
             _, _ = env.reset(seed=seed)
@@ -29,14 +61,11 @@ def get_make_env_fn(**kargs):
         #     video_callable=lambda e_idx: record) if monitor_mode else env
         trigger = lambda e_idx: record
 
-
-     
-
         # wrap the env in the record video
-        if monitor_mode:
-            print("using monitor mode")
-            env = gym.wrappers.RecordVideo(env, video_folder="Komsun_DRL", name_prefix="komsun-test-video", episode_trigger=lambda x: True)
-            # env = gym.wrappers.RecordVideo(env, video_folder=mdir, name_prefix="komsun-test-video", episode_trigger=lambda x: True)
+        # if monitor_mode:
+        #     print("using monitor mode")
+        #     env = gym.wrappers.RecordVideo(env, video_folder="Komsun_DRL", name_prefix="komsun-test-video", episode_trigger=lambda x: True)
+        #     # env = gym.wrappers.RecordVideo(env, video_folder=mdir, name_prefix="komsun-test-video", episode_trigger=lambda x: True)
 
         # env = wrappers.RecordVideo(
         #     env, video_folder=mdir, episode_trigger=trigger,disable_logger=True) if monitor_mode else env

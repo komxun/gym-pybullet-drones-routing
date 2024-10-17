@@ -1,69 +1,75 @@
 from gym_pybullet_drones.drl_custom.drl_imports import *
-from datetime import datetime
-
 LEAVE_PRINT_EVERY_N_SECS = 60
 ERASE_LINE = '\x1b[2K'
-class DQN():
+class DuelingDDQN():
     def __init__(self, 
                  replay_buffer_fn, 
                  value_model_fn, 
                  value_optimizer_fn, 
                  value_optimizer_lr,
+                 max_gradient_norm,
                  training_strategy_fn,
                  evaluation_strategy_fn,
                  n_warmup_batches,
-                 update_target_every_steps):
+                 update_target_every_steps,
+                 tau):
         self.replay_buffer_fn = replay_buffer_fn
         self.value_model_fn = value_model_fn
         self.value_optimizer_fn = value_optimizer_fn
         self.value_optimizer_lr = value_optimizer_lr
+        self.max_gradient_norm = max_gradient_norm
         self.training_strategy_fn = training_strategy_fn
         self.evaluation_strategy_fn = evaluation_strategy_fn
         self.n_warmup_batches = n_warmup_batches
         self.update_target_every_steps = update_target_every_steps
+        self.tau = tau
 
     def optimize_model(self, experiences):
         states, actions, rewards, next_states, is_terminals = experiences
         batch_size = len(is_terminals)
-        
-        max_a_q_sp = self.target_model(next_states).detach().max(1)[0].unsqueeze(1)
+
+        argmax_a_q_sp = self.online_model(next_states).max(1)[1]
+        q_sp = self.target_model(next_states).detach()
+        max_a_q_sp = q_sp[
+            np.arange(batch_size), argmax_a_q_sp].unsqueeze(1)
         target_q_sa = rewards + (self.gamma * max_a_q_sp * (1 - is_terminals))
         q_sa = self.online_model(states).gather(1, actions)
 
         td_error = q_sa - target_q_sa
         value_loss = td_error.pow(2).mul(0.5).mean()
         self.value_optimizer.zero_grad()
-        value_loss.backward()
+        value_loss.backward()        
+        torch.nn.utils.clip_grad_norm_(self.online_model.parameters(), 
+                                       self.max_gradient_norm)
         self.value_optimizer.step()
 
     def interaction_step(self, state, env):
         action = self.training_strategy.select_action(self.online_model, state)
         # new_state, reward, is_terminal, info = env.step(action)
         new_state, reward, is_terminal, is_truncated, info = env.step(action)
-        
         # is_truncated = 'TimeLimit.truncated' in info and info['TimeLimit.truncated']
-        
         is_failure = is_terminal and not is_truncated
-        # print(f"is_terminal: {is_terminal}, is_truncate: {is_truncated}, is_failure: {is_failure}")
         experience = (state, action, reward, new_state, float(is_failure))
-
         self.replay_buffer.store(experience)
         self.episode_reward[-1] += reward
         self.episode_timestep[-1] += 1
         self.episode_exploration[-1] += int(self.training_strategy.exploratory_action_taken)
         return new_state, is_terminal
     
-    def update_network(self):
+    def update_network(self, tau=None):
+        tau = self.tau if tau is None else tau
         for target, online in zip(self.target_model.parameters(), 
                                   self.online_model.parameters()):
-            target.data.copy_(online.data)
+            target_ratio = (1.0 - tau) * target.data
+            online_ratio = tau * online.data
+            mixed_weights = target_ratio + online_ratio
+            target.data.copy_(mixed_weights)
 
     def train(self, make_env_fn, make_env_kargs, seed, gamma, 
               max_minutes, max_episodes, goal_mean_100_reward):
         training_start, last_debug_time = time.time(), float('-inf')
 
         self.checkpoint_dir = tempfile.mkdtemp()
-        # self.checkpoint_dir = "Komsun_DRL"
         self.make_env_fn = make_env_fn
         self.make_env_kargs = make_env_kargs
         self.seed = seed
@@ -81,7 +87,7 @@ class DQN():
         
         self.target_model = self.value_model_fn(nS, nA)
         self.online_model = self.value_model_fn(nS, nA)
-        self.update_network()
+        self.update_network(tau=1.0)
 
         self.value_optimizer = self.value_optimizer_fn(self.online_model, 
                                                        self.value_optimizer_lr)
@@ -99,7 +105,6 @@ class DQN():
             # state, is_terminal = env.reset(), False
             state, _ = env.reset(seed = seed)   # added by Komsun
             is_terminal = False
-
             self.episode_reward.append(0.0)
             self.episode_timestep.append(0.0)
             self.episode_exploration.append(0.0)
@@ -115,7 +120,7 @@ class DQN():
                 
                 if np.sum(self.episode_timestep) % self.update_target_every_steps == 0:
                     self.update_network()
-                
+
                 if is_terminal:
                     gc.collect()
                     break
@@ -129,13 +134,12 @@ class DQN():
             
             total_step = int(np.sum(self.episode_timestep))
             self.evaluation_scores.append(evaluation_score)
-            # print(f"latest evaluate_score = {self.evaluation_scores[-1]}")            
+            
             mean_10_reward = np.mean(self.episode_reward[-10:])
             std_10_reward = np.std(self.episode_reward[-10:])
             mean_100_reward = np.mean(self.episode_reward[-100:])
             std_100_reward = np.std(self.episode_reward[-100:])
             mean_100_eval_score = np.mean(self.evaluation_scores[-100:])
-            # print(f"mean_100_reward = {mean_100_eval_score}")
             std_100_eval_score = np.std(self.evaluation_scores[-100:])
             lst_100_exp_rat = np.array(
                 self.episode_exploration[-100:])/np.array(self.episode_timestep[-100:])
@@ -180,30 +184,26 @@ class DQN():
         print('Final evaluation score {:.2f}\u00B1{:.2f} in {:.2f}s training time,'
               ' {:.2f}s wall-clock time.\n'.format(
                   final_eval_score, score_std, training_time, wallclock_time))
-        # Don't forget to close the video recorder before the env!
         env.close() ; del env
         self.get_cleaned_checkpoints()
         return result, final_eval_score, training_time, wallclock_time
     
     def evaluate(self, eval_policy_model, eval_env, n_episodes=1):
-        # print("DQN: Evaluating . . .")
         rs = []
-        for nEp in range(n_episodes):
+        for _ in range(n_episodes):
             # s, d = eval_env.reset(), False
             s, info = eval_env.reset(seed = self.seed)
             d = False
+
             rs.append(0)
-            # print(f"Evaluating episode {nEp}")
-            # for kom in count():
             episode_over = False
             while not episode_over:
-                # print(f"evaluating step {kom}")
                 a = self.evaluation_strategy.select_action(eval_policy_model, s)
+                # s, r, d, _ = eval_env.step(a)
                 s, r, d, trunc, info = eval_env.step(a)
                 rs[-1] += r
-                # if d: break
                 episode_over = d or trunc
-        
+
         return np.mean(rs), np.std(rs)
 
     def get_cleaned_checkpoints(self, n_checkpoints=5):
@@ -225,24 +225,15 @@ class DQN():
                 os.unlink(path)
 
         return self.checkpoint_paths
-    def save_model(self):
-        fileName = "Komsun_DRL/"
-        fileName += "model-DQN-" + datetime.now().strftime("%m.%d.%Y_%H.%M.%S") 
-        fileName += ".pth"
-        torch.save(self.online_model.state_dict(), fileName)
-        print(f"Final DQN model saved successfully!: {fileName}")
 
     def demo_last(self, title='Fully-trained {} Agent', n_episodes=10, max_n_videos=3):
-        # torch.save(self.online_model.state_dict(), 'Komsun_DRL/komsun2_final_dqn_model.pth')
-        # print("Final DQN model saved successfully!")
-
         env = self.make_env_fn(**self.make_env_kargs, monitor_mode='evaluation', render=True, record=True)
 
         checkpoint_paths = self.get_cleaned_checkpoints()
         last_ep = max(checkpoint_paths.keys())
         self.online_model.load_state_dict(torch.load(checkpoint_paths[last_ep]))
 
-        self.evaluate(self.online_model, env, n_episodes=10)
+        self.evaluate(self.online_model, env, n_episodes=n_episodes)
         env.close()
         # data = get_gif_html(env_videos=env.videos, 
         #                     title=title.format(self.__class__.__name__),
@@ -265,6 +256,13 @@ class DQN():
         #                     max_n_videos=max_n_videos)
         del env
         # return HTML(data=data)
+
+    def save_model(self):
+        fileName = "Komsun_DRL/"
+        fileName += "Model-DuelingDDQN-" + datetime.now().strftime("%m.%d.%Y_%H.%M.%S") 
+        fileName += ".pth"
+        torch.save(self.online_model.state_dict(), fileName)
+        print(f"Final model saved successfully!: {fileName}")
 
     def save_checkpoint(self, episode_idx, model):
         torch.save(model.state_dict(), 
