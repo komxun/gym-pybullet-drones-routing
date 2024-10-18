@@ -48,10 +48,10 @@ best_agent, best_eval_score = None, float('-inf')
 for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-aviary-v0',
-        'gamma': 1.00,
-        'max_minutes': 20,
-        'max_episodes': 10000,
-        'goal_mean_100_reward': -800  # to be determined properly
+        'gamma': 1,
+        'max_minutes': 10,
+        'max_episodes': 200,
+        'goal_mean_100_reward': 1000  # to be determined properly
     }
 
     value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
@@ -65,12 +65,12 @@ for seed in SEEDS:
     evaluation_strategy_fn = lambda: GreedyStrategy()
 
     # replay_buffer_fn = lambda: ReplayBuffer(max_size=10000, batch_size=64)
-    replay_buffer_fn = lambda: PrioritizedReplayBuffer(
-        max_samples=10000, batch_size=64, rank_based=True, 
-        alpha=0.6, beta0=0.1, beta_rate=0.99995)
     # replay_buffer_fn = lambda: PrioritizedReplayBuffer(
-    #     max_samples=20000, batch_size=64, rank_based=False,
+    #     max_samples=10000, batch_size=64, rank_based=True, 
     #     alpha=0.6, beta0=0.1, beta_rate=0.99995)
+    replay_buffer_fn = lambda: PrioritizedReplayBuffer(
+        max_samples=20000, batch_size=64, rank_based=False,
+        alpha=0.6, beta0=0.1, beta_rate=0.99995)
     n_warmup_batches = 5
     update_target_every_steps = 1
     tau = 0.1

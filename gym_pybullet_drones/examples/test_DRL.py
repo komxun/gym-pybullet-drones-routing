@@ -39,7 +39,12 @@ model = value_model_fn(numObserv, numAct)
 fileName = "Komsun_DRL/"
 # fileName += "Model-3actions-DuelingDDQN-10.17.2024_16.44.32.pth" # success
 
-fileName += "Model-5actions-DuelingDDQN-10.17.2024_17.21.36.pth"
+# fileName += "Model-5actions-DuelingDDQN-10.17.2024_17.21.36.pth"
+# fileName += "Model-PER-10.18.2024_14.05.34.pth"
+# fileName += "Model-DuelingDDQN-10.18.2024_16.14.20.pth" # train for 1 hour -> still bad (wtf?)
+# fileName += "Model-DuelingDDQN-10.18.2024_16.45.31.pth"
+# fileName += "Model-PER-10.18.2024_17.35.31.pth" # partly work but weird
+fileName += "Model-PER-10.18.2024_19.08.42.pth"
 # CAUTION: If change number of actions -> need to also modify the action space in testing environment (AutoroutingRLAviary)!!!!
 model.load_state_dict(torch.load(fileName,map_location=torch.device('cpu'), weights_only=True))
 model.eval()
@@ -74,8 +79,10 @@ for _ in range(20):
         # Get the action using the trained model 
         with torch.no_grad():
             action = model(state_tensor).argmax(dim=1).item()
+            print(f"action = {action}")
         # # ======Random Action!!=========
-        # action = random.randint(1, 4)
+        # action = random.randint(2, 3)
+        # action = 3
 
         #### Step the simulation ###################################
         # Take the action in the environment

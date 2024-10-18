@@ -434,7 +434,7 @@ class BaseRouting(object):
         # numRays = 1024
         # numRays = 100
         numRays = self.NUM_RAYS
-        rayLen = 1.5
+        rayLen = 1.25
         # rayLen = 4
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]

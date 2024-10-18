@@ -62,9 +62,9 @@ for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-aviary-v0',
         'gamma': 1.00,
-        'max_minutes': 20,
+        'max_minutes': 10,
         'max_episodes': 10000,
-        'goal_mean_100_reward': -800  # to be determined properly
+        'goal_mean_100_reward': -20  # to be determined properly
     }
     
     # value_model_fn = lambda nS, nA: FCQ(nS, nA, hidden_dims=(512,128))

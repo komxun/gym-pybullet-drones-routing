@@ -208,9 +208,9 @@ class ExtendedRLAviary(RoutingAviary):
                         raise ValueError("[Error] Global route was not found. Mission aborted.")        
 
                 # ==== PASSIVE BEHAVIOUR ======
-                # self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 
-
+        
                 if action ==0:
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
                 elif action ==1:
@@ -218,7 +218,7 @@ class ExtendedRLAviary(RoutingAviary):
                 elif action ==2:
                     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 elif action ==3:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -10)
                 elif action==4:
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                 

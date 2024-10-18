@@ -82,21 +82,20 @@ class AutoroutingRLAviary(ExtendedRLAviary):
         elapsed_time_sec = self.step_counter/self.PYB_FREQ
 
         # ---------Reward design-------------
-        reachThreshold_m = 0.2
-        reward_choice = 4
+        reachThreshold_m = 0.5  #0.2
+        reward_choice = 4  # 4:best
         
         if reward_choice == 1:
             # Initialize reward
-            ret = 0 
+            ret = -1 
             
             # Check if the UAV reached the goal
             if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
-                ret += 500
-            if int(self.CONTACT_FLAGS[0]) == 1:
+                ret = 20
+            elif int(self.CONTACT_FLAGS[0]) == 1:
                 # print("- penalty from collision")
-                ret -= 100
+                ret = -10
                 # self.COMPUTE_DONE = True
-            ret -= 10
         elif reward_choice ==2:
             ret = -10 * elapsed_time_sec * np.linalg.norm(np.array([0.2, 12, 1]).reshape(1,3) - curPos.reshape(1,3))**2
             
@@ -129,7 +128,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
             # step_cost = d2destin**1
             step_cost = 10
-            desire_reach_time_s = 15
+            desire_reach_time_s = 10
             desire_num_step = desire_reach_time_s * self.PYB_FREQ
 
             a_1 = reachThreshold_m
@@ -151,13 +150,9 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret = destin_reward
                 print(f"\n====== Reached Destination!!! ====== ret = {ret}\n")
 
-            if int(self.CONTACT_FLAGS[0]) == 1:
-                
+            elif int(self.CONTACT_FLAGS[0]) == 1:
                 # ret -= d2destin
                 ret = -d2destin
-
-
-
                 # print(f"Collided: ret = {ret}")
         elif reward_choice ==5:
             d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
@@ -238,7 +233,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
         # cond2 : reached destination area
         # cond2 = np.linalg.norm(self.routing.DESTINATION.reshape(3,1) - state[0:3].reshape(3,1)) <= 0.5
         
-        reachThreshold_m = 0.2  #0.0001
+        reachThreshold_m = 0.5  #0.0001
 
         if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
             return True
