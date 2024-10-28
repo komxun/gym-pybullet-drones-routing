@@ -37,7 +37,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 1
+DEFAULT_NUM_DRONES = 20
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
@@ -46,7 +46,7 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
 DEFAULT_SIMULATION_FREQ_HZ = 60
 DEFAULT_CONTROL_FREQ_HZ = 60
-DEFAULT_DURATION_SEC = 12
+DEFAULT_DURATION_SEC = 90
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
@@ -66,27 +66,41 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
-    H = .1
-    H_STEP = .05
-    R = .3
+    H = 0.1
+    H_STEP = 0.02
+    R = 2
+    R_D = 4
     # INIT_XYZS = np.array([[R*np.cos((i/6)*2*np.pi+np.pi/2), R*np.sin((i/6)*2*np.pi+np.pi/2)-R, H+i*H_STEP] for i in range(num_drones)])
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
-    INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
+    # INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    # INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
+    # Initialize empty arrays
+    INIT_XYZS = np.zeros((num_drones, 3))
+    INIT_RPYS = np.zeros((num_drones, 3))
+    DESTINS = np.zeros((num_drones, 3))
 
+    # Loop over the range of num_drones
+    INIT_XYZS[0] = [0,0,0.8]
+    INIT_RPYS[0] = [0,0,0]
+    DESTINS[0] = [0,5,1]
+    ORIGIN = [0,4,1]
+
+    for i in range(1, num_drones):
+        # Initialize INIT_XYZS
+        INIT_XYZS[i] = [ORIGIN[0]+(R)*np.cos((i/num_drones)*2*np.pi+np.pi/2),
+                        ORIGIN[1]+(R)*np.sin((i/num_drones)*2*np.pi+np.pi/2)-(R), 
+                        ORIGIN[2]+H_STEP]
+        # INIT_XYZS[i] = [ORIGIN[0]+(R)*np.cos((i/6)*2*np.pi+np.pi/2),
+        #                 ORIGIN[1]+(R)*np.sin((i/6)*2*np.pi+np.pi/2)-(R), 
+        #                 ORIGIN[2]+H_STEP*i]
+        
+        # Initialize INIT_RPYS
+        INIT_RPYS[i] = [0, 0, i * (np.pi/2)/num_drones]
+        
+        # Initialize DESTINS
+        DESTINS[i] = [ORIGIN[0]+(R_D)*np.cos((i/num_drones)*2*np.pi+np.pi/2+1*np.pi/2),
+                        ORIGIN[1]+np.sin((i/num_drones)*2*np.pi+np.pi/2+3*np.pi/2)-(R_D), 
+                        ORIGIN[2]]
     #### Create the environment ################################
-    # env = CtrlAviary(drone_model=drone,
-    #                     num_drones=num_drones,
-    #                     initial_xyzs=INIT_XYZS,
-    #                     initial_rpys=INIT_RPYS,
-    #                     physics=physics,
-    #                     neighbourhood_radius=10,
-    #                     pyb_freq=simulation_freq_hz,
-    #                     ctrl_freq=control_freq_hz,
-    #                     gui=gui,
-    #                     record=record_video,
-    #                     obstacles=obstacles,
-    #                     user_debug_gui=user_debug_gui
-    #                     )
     
     env = RoutingAviary(drone_model=drone,
                          num_drones=num_drones,
@@ -118,15 +132,24 @@ def run(
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone, drone_id = i) for i in range(num_drones)]
+    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
     routeCounter = 1
+    for j in range(num_drones):
+        routing[j].CUR_POS = INIT_XYZS[j,:]
+        routing[j].DESTINATION = [10,0,0]
+        routing[j].DESTINATION = DESTINS[j,:]
+
+
+    camSwitch = 1
+    camSwitchFreq_step = 60
 
     #### Run the simulation ####################################
     action = np.zeros((num_drones,4))
     START = time.time()
-    
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+    routeCounter = np.ones(num_drones)
     for i in range(0, int(duration_sec*env.CTRL_FREQ)):
-
+        camSwitch = -1*camSwitch if i%camSwitchFreq_step == 0 else camSwitch
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
         #### Step the simulation ###################################
@@ -135,30 +158,34 @@ def run(
         #### Compute control for the current way point #############
         for j in range(num_drones):
             
-            
+            if routing[j].REACH_DESTIN:
+                routing[j].reset()
+                routing[j].DESTINATION = INIT_XYZS[j,:]
+                routeCounter[j] = 1
+                
             #------- Compute route (waypoint) to follow ----------------
             foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                   state = obs[j], 
-                                                  home_pos = np.array((0,0,0)), 
-                                                  target_pos = np.array((((-1)**j)*(j*0.2), 12, 0.5)),
+                                                  home_pos = routing[j].CUR_POS, 
+                                                  target_pos = routing[j].DESTINATION,
                                                   speed_limit = env.SPEED_LIMIT,
                                                   obstacle_data = env.OBSTACLE_DATA,
                                                   drone_ids = env.DRONE_IDS
                                                   )
-            
-            if foundPath>0:
-                routeCounter+=1
-                if routeCounter==2:
-                    routing[j].setGlobalRoute(path)
         
+            if foundPath>0:
+                routeCounter[j]+=1
+                if routeCounter[j]>=2 :
+                    print("****************Re-calculating destination")
+                    routing[j].setGlobalRoute(path)
             
-            # if i>150:
-            #     routing[j]._setCommand(SpeedCommandFlag, "hover")
-            # else:
-            #     routing[j]._setCommand(SpeedCommandFlag, "constant",0.1)
-            routing[j]._setCommand(SpeedCommandFlag, "constant",0.5)
-            routing[j]._setCommand(RouteCommandFlag, "follow_local")
-            
+            if j==0:
+                routing[j]._setCommand(SpeedCommandFlag, "accelerate",2)
+                routing[j]._setCommand(RouteCommandFlag, "follow_local")
+            else:
+                routing[j]._setCommand(SpeedCommandFlag, "accelerate", random.random())
+                # routing[j]._setCommand(SpeedCommandFlag, "accelerate",2)
+                routing[j]._setCommand(RouteCommandFlag, "follow_global")
             
             action[j, :], _, _ = ctrl[j].computeControlFromState(control_timestep=env.CTRL_TIMESTEP,
                                                                     state=obs[j],
@@ -167,9 +194,13 @@ def run(
                                                                     target_vel = routing[j].TARGET_VEL
                                                                     )
             
-            # p.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=-45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
-            p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-
+            # p.resetDebugVisualizerCamera(cameraDistance=5, cameraYaw=0, cameraPitch=-92, cameraTargetPosition=routing[0].CUR_POS)
+            # p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=obs[0][5], cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
+            if camSwitch>0:
+                p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
+            else:
+                # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
+                p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=0, cameraPitch=-91, cameraTargetPosition=routing[0].CUR_POS)
         #### Log the simulation ####################################
         # for j in range(num_drones):
         #     logger.log(drone=j,

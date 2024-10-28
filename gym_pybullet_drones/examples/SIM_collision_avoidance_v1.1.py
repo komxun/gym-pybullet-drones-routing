@@ -39,7 +39,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 1
+DEFAULT_NUM_DRONES = 2
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
@@ -131,7 +131,7 @@ def run(
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone) for i in range(num_drones)]
+    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
     routeCounter = 1
 
     #### Run the simulation ####################################
@@ -143,7 +143,13 @@ def run(
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
         # ======Random Action!!=========
-        action = random.randint(1, 4)
+        action = random.randint(0, 3)
+        # if i<80:
+        #     action = 2
+        # else:
+        #     print(f"\nDecelerating!!!!!\n")
+        #     action = 1
+        # action = 0
         # action = 1
 
         #### Step the simulation ###################################

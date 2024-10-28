@@ -68,7 +68,7 @@ class PER():
                                   self.online_model.parameters()):
             target_ratio = (1.0 - self.tau) * target.data
             online_ratio = self.tau * online.data
-            mixed_weights = target_ratio + online_ratio
+            mixed_weights = target_ratio.cuda() + online_ratio.cuda()
             target.data.copy_(mixed_weights)
 
     def train(self, make_env_fn, make_env_kargs, seed, gamma, 
@@ -93,6 +93,9 @@ class PER():
         
         self.target_model = self.value_model_fn(nS, nA)
         self.online_model = self.value_model_fn(nS, nA)
+        # Try CUDA
+        self.online_model = self.online_model.cuda()
+
         self.update_network(tau=1.0)
 
         self.value_optimizer = self.value_optimizer_fn(self.online_model, 
@@ -113,7 +116,7 @@ class PER():
             self.episode_reward.append(0.0)
             self.episode_timestep.append(0.0)
             self.episode_exploration.append(0.0)
-
+            # print(f"\nGPU memory allocated: {torch.cuda.memory_allocated()}\n")
             for step in count():
                 state, is_terminal = self.interaction_step(state, env)
                 

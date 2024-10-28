@@ -68,7 +68,7 @@ class ExtendedRLAviary(RoutingAviary):
         """
         # =============================================================================
         homePos =  np.array([0,0,0.5]) 
-        destin  =  np.array([0.2, 12, 1])
+        destin  =  np.array([0.2, 10, 1])
         self.HOME_POS = homePos
         self.DESTIN = destin
         # =============================================================================
@@ -88,7 +88,7 @@ class ExtendedRLAviary(RoutingAviary):
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
             if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
                 self.ctrl = [DSLPIDControl(drone_model=DroneModel.CF2X) for i in range(num_drones)]
-                self.routing = [IFDSRoute(drone_model=DroneModel.CF2X) for i in range(num_drones)]
+                self.routing = [IFDSRoute(drone_model=DroneModel.CF2X, drone_id=i) for i in range(num_drones)]
                 
                 for j in range(len(self.routing)):
                     self.routing[j].HOME_POS = homePos
@@ -208,17 +208,17 @@ class ExtendedRLAviary(RoutingAviary):
                         raise ValueError("[Error] Global route was not found. Mission aborted.")        
 
                 # ==== PASSIVE BEHAVIOUR ======
-                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
                 
-        
                 if action ==0:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
                 elif action ==1:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local")
                 elif action ==2:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
                 elif action ==3:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -10)
+                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
                 elif action==4:
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                 

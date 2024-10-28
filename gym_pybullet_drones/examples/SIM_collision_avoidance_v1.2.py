@@ -25,6 +25,8 @@ import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
+import random
+
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
@@ -46,7 +48,7 @@ DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
 DEFAULT_SIMULATION_FREQ_HZ = 60
 DEFAULT_CONTROL_FREQ_HZ = 60
-DEFAULT_DURATION_SEC = 12
+DEFAULT_DURATION_SEC = 20
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
@@ -66,41 +68,50 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
-    H = .1
-    H_STEP = .05
-    R = .3
     # INIT_XYZS = np.array([[R*np.cos((i/6)*2*np.pi+np.pi/2), R*np.sin((i/6)*2*np.pi+np.pi/2)-R, H+i*H_STEP] for i in range(num_drones)])
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 1.3+ 0.05*i ] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
 
+    # Load the Model
+    value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
+
+    # TODO: automate reading the correct dimension of nS and nA
+    numObserv = 1013
+    numAct = 5
+    model = value_model_fn(numObserv, numAct)
+    fileName = "Komsun_DRL/"
+    # fileName += "Model-3actions-DuelingDDQN-10.17.2024_16.44.32.pth" # success
+    # fileName += "Model-5actions-DuelingDDQN-10.17.2024_17.21.36.pth"
+    # fileName += "Model-DuelingDDQN-10.18.2024_16.14.20.pth" # train for 1 hour -> still bad (wtf?)
+    # fileName += "Model-DuelingDDQN-10.18.2024_16.45.31.pth"
+    # fileName += "Model-PER-10.18.2024_17.35.31.pth" # partly work but weird
+    # fileName += "Model-DuelingDDQN-10.21.2024_11.07.26.pth"
+    # fileName += "Model-PER-10.21.2024_15.35.27.pth" # Good
+    # fileName += "Model-PER-10.21.2024_16.48.43.pth" # 60 minutes 1124 episodes
+    # fileName += "Model-PER-10.22.2024_16.28.16.pth" # ok result
+    fileName += "Model-DuelingDDQN-10.22.2024_17.52.46.pth"  # Good!!!!
+    # fileName += "Model-PER-10.23.2024_12.47.15.pth" # PER 40 min (success sometime)
+    # fileName += "Model-DuelingDDQN-10.24.2024_15.34.32.pth"  # 90 minutes (stay hovering at the start (why?))
+    # CAUTION: If change number of actions -> need to also modify the action space in testing environment (AutoroutingRLAviary)!!!!
+    model.load_state_dict(torch.load(fileName,map_location=torch.device('cpu'), weights_only=True))
+    model.eval()
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # model = model.to(device)
+    model = model.to("cpu")
+    print("Model loaded and ready for inference!")
+
     #### Create the environment ################################
-    # env = CtrlAviary(drone_model=drone,
-    #                     num_drones=num_drones,
-    #                     initial_xyzs=INIT_XYZS,
-    #                     initial_rpys=INIT_RPYS,
-    #                     physics=physics,
-    #                     neighbourhood_radius=10,
-    #                     pyb_freq=simulation_freq_hz,
-    #                     ctrl_freq=control_freq_hz,
-    #                     gui=gui,
-    #                     record=record_video,
-    #                     obstacles=obstacles,
-    #                     user_debug_gui=user_debug_gui
-    #                     )
     
-    env = RoutingAviary(drone_model=drone,
-                         num_drones=num_drones,
-                         initial_xyzs=INIT_XYZS,
-                         initial_rpys=INIT_RPYS,
-                         physics=physics,
-                         neighbourhood_radius=10,
-                         pyb_freq=simulation_freq_hz,
-                         ctrl_freq=control_freq_hz,
-                         gui=gui,
-                         record=record_video,
-                         obstacles=obstacles,
-                         user_debug_gui=user_debug_gui
-                         )
+    env = AutoroutingRLAviary(
+                 drone_model = drone,
+                 initial_xyzs=INIT_XYZS,
+                 initial_rpys=INIT_RPYS,
+                 physics= physics,
+                 pyb_freq=simulation_freq_hz,
+                 ctrl_freq=control_freq_hz,
+                 gui=gui,
+                 record=record_video,
+                 )
     
 
     #### Obtain the PyBullet Client ID from the environment ####
@@ -118,58 +129,32 @@ def run(
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone, drone_id = i) for i in range(num_drones)]
+    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
     routeCounter = 1
 
     #### Run the simulation ####################################
-    action = np.zeros((num_drones,4))
+    # action = np.zeros((num_drones,4))
     START = time.time()
     
     for i in range(0, int(duration_sec*env.CTRL_FREQ)):
 
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
+        # ======Random Action!!=========
+        action = random.randint(0, 3)
+        # if i<80:
+        #     action = 2
+        # else:
+        #     print(f"\nDecelerating!!!!!\n")
+        #     action = 1
+        # action = 0
+        # action = 1
+
         #### Step the simulation ###################################
         obs, reward, terminated, truncated, info = env.step(action)
-
-        #### Compute control for the current way point #############
-        for j in range(num_drones):
-            
-            
-            #------- Compute route (waypoint) to follow ----------------
-            foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
-                                                  state = obs[j], 
-                                                  home_pos = np.array((0,0,0)), 
-                                                  target_pos = np.array((((-1)**j)*(j*0.2), 12, 0.5)),
-                                                  speed_limit = env.SPEED_LIMIT,
-                                                  obstacle_data = env.OBSTACLE_DATA,
-                                                  drone_ids = env.DRONE_IDS
-                                                  )
-            
-            if foundPath>0:
-                routeCounter+=1
-                if routeCounter==2:
-                    routing[j].setGlobalRoute(path)
+        # print(f"obs len = {len(obs[0])}")
+        print(f"truncated = {truncated}")
         
-            
-            # if i>150:
-            #     routing[j]._setCommand(SpeedCommandFlag, "hover")
-            # else:
-            #     routing[j]._setCommand(SpeedCommandFlag, "constant",0.1)
-            routing[j]._setCommand(SpeedCommandFlag, "constant",0.5)
-            routing[j]._setCommand(RouteCommandFlag, "follow_local")
-            
-            
-            action[j, :], _, _ = ctrl[j].computeControlFromState(control_timestep=env.CTRL_TIMESTEP,
-                                                                    state=obs[j],
-                                                                    target_pos=routing[j].TARGET_POS,
-                                                                    target_rpy=INIT_RPYS[j, :],
-                                                                    target_vel = routing[j].TARGET_VEL
-                                                                    )
-            
-            # p.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=-45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
-            p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-
         #### Log the simulation ####################################
         # for j in range(num_drones):
         #     logger.log(drone=j,
@@ -193,7 +178,7 @@ def run(
     # logger.save()
     # logger.save_as_csv("pid") # Optional CSV save
 
-    # #### Plot the simulation results ###########################
+    #### Plot the simulation results ###########################
     # if plot:
     #     logger.plot()
 

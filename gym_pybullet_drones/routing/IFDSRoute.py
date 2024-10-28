@@ -14,6 +14,7 @@ class IFDSRoute(BaseRouting):
 
     def __init__(self,
                  drone_model: DroneModel,
+                 drone_id,
                  g: float=9.8
                  ):
         """Common routing classes __init__ method.
@@ -26,17 +27,18 @@ class IFDSRoute(BaseRouting):
             The gravitational acceleration in m/s^2.
 
         """
-        super().__init__(drone_model=drone_model, g=g)
+        super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
         # self.RHO0_IFDS = 6.5
         self.RHO0_IFDS = 8.5
         self.SIGMA0_IFDS = 0.5
-        self.SF_IFDS = 1
+        self.SF_IFDS = 0
         self.TARGET_THRESH = 0.1
         self.SIM_MODE = 2
         self.DT = 0.5  # 0.1  #0.5
         self.TSIM = 10
         self.RTSIM = 200
+        self.REACH_DESTIN = 0
         
         self.reset()
 
@@ -130,12 +132,14 @@ class IFDSRoute(BaseRouting):
     def _updateTargetVel(self, route_timestep, speed_limit, path_vect_unit):
         # -------------------- Target Velocity Vector ----------------------
         curSpeed = np.linalg.norm(self.CUR_VEL)
+        # print(f"\n Current Speed = {curSpeed}\n")
         
-        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 1:
-            # print("Reaching destination -> Stopping . . .")
+        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.1:
+            print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
+            self.REACH_DESTIN = 1
             # acceleration = 0
-        # elif self.STAT[1].name == 'DECELERATE' and np.linalg.norm(self.CUR_VEL) <= 0.2:
+        # elif self.STAT[1].name == 'DECELERATE' and np.linalg.norm(self.CUR_VEL) <= 0.3:
         #     print("stopping")
         #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
         #     self._setCommand(SpeedCommandFlag, "hover")
@@ -143,14 +147,19 @@ class IFDSRoute(BaseRouting):
             # if np.linalg.norm(self.CUR_POS - self.DESTINATION) < 4: # [m]
             #     print("Approaching destination -> Decelerating . . .")
             #     self._setCommand(SpeedCommandFlag, "accelerate", -0.02)  # [m/s^2]
-            
+            self.REACH_DESTIN = 0
             if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
                 acceleration = self.COMMANDS[1]._value
                 # self.TARGET_VEL = (curSpeed + acceleration*route_timestep*100) * path_vect_unit
                 # self.TARGET_VEL = (curSpeed + acceleration*self.route_counter*0.01) * path_vect_unit
-                # print(f"curSpeed = {curSpeed}")
-                # print(f"curSpeed + accel*dt = {(curSpeed + acceleration*self.DT)}")
+    
+                # print(f"\ncurSpeed + accel*dt = {(curSpeed + acceleration*self.DT)}\n")
                 self.TARGET_VEL = (curSpeed + acceleration*self.DT) * path_vect_unit
+            elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
+                if self.COMMANDS[1]._value:
+                    self.TARGET_VEL = self.COMMANDS[1]._value * path_vect_unit
+                else:
+                    self.TARGET_VEL = curSpeed * path_vect_unit
                
         self._processTargetVel(speed_limit)
             
@@ -158,10 +167,7 @@ class IFDSRoute(BaseRouting):
         
         # print(f"{self.COMMANDS[1]._name}:  {self.COMMANDS[1]._value}")
         if self.COMMANDS[1]._name != 'none' and self.COMMANDS[1]._name != 'hover' and self.STAT[1].name != "HOVERING":
-            
-            
-            
-            
+
             if  np.linalg.norm(self.TARGET_VEL) > speed_limit:
                 # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
                 # self.TARGET_VEL = np.zeros(3)
@@ -169,7 +175,7 @@ class IFDSRoute(BaseRouting):
                 # self.TARGET_VEL = speed_limit
                 # currentTargSpeed = np.linalg.norm(self.TARGET_VEL)
                 # print(f"Speeed limit: {speed_limit}, Target speed: {currentTargSpeed}")
-                # print(f"max speed limit reached at {speed_limit} m/s")
+                # print(f"\nmax speed limit reached at {speed_limit} m/s\n")
                 
                 # self._setCommand(SpeedCommandFlag, "constant", np.sign(self.COMMANDS[1]._value) * speed_limit)
                 targ_vel_unit = self.TARGET_VEL /  np.linalg.norm(self.TARGET_VEL)
@@ -284,7 +290,7 @@ class IFDSRoute(BaseRouting):
                            [v*(Z - zd)/dist]])
             # Pre-allocation
             Mm = np.zeros((3,3))
-            sum_w = 0;
+            sum_w = 0
             
             if len(Obj) != 0:
                 # print("DETECTED " + str(len(Obj)) + " OBSTACLES!")

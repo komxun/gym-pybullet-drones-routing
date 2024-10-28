@@ -82,7 +82,7 @@ class RoutingAviary(BaseAviary):
                           )
         
         #### Set a limit on the maximum target speed ###############
-        speedLimitingFactor = 0.1   # 0.03
+        speedLimitingFactor = 0.03  #0.1 # 0.03
         self.SPEED_LIMIT = speedLimitingFactor * self.MAX_SPEED_KMH * (1000/3600)
         self.CONTACT_POINTS = [() for _ in range(self.NUM_DRONES)]
         self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES, dtype=int)
@@ -314,9 +314,11 @@ class RoutingAviary(BaseAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        scene = 2
-        
-        if scene == 1:
+        scene = 0
+        if scene == 0:
+            pass
+
+        elif scene == 1:
             RoutingAviary.OBSTACLE_IDS.add(
                 p.loadURDF("cube.urdf",
                         [0, 2, .5],

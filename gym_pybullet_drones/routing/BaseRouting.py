@@ -62,6 +62,7 @@ class BaseRouting(object):
 
     def __init__(self,
                  drone_model: DroneModel,
+                 drone_id,
                  g: float=9.8
                  ):
         """Common Routing classes __init__ method.
@@ -76,6 +77,7 @@ class BaseRouting(object):
         """
         #### Set general use constants #############################
         self.DRONE_MODEL = drone_model
+        self.DRONE_ID = drone_id
         """DroneModel: The type of drone to control."""
         self.GRAVITY = g*self._getURDFParameter('m')
         """float: The gravitational force (M*g) acting on each drone."""
@@ -96,8 +98,10 @@ class BaseRouting(object):
         self.DETECTED_OBS_IDS = []
         self.DETECTED_OBS_DATA = {}
 
-        self.NUM_RAYS = 200
-        self.RAYS_INFO = np.zeros(1000,)
+        self.NUM_RAYS = 24
+        self.RAY_LEN_M = 1.25
+        self.RAYS_INFO = np.zeros(5*self.NUM_RAYS,)
+        
         
         
         
@@ -207,8 +211,12 @@ class BaseRouting(object):
 
     def _plotRoute(self, path):
         pathColor = [0, 0, 1]
+        print(f"drone id = {self.DRONE_ID}")
+        if self.DRONE_ID ==0:
+            p.removeAllUserDebugItems()
         for i in range(0, path.shape[1]-1, 1):
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.05)
+            # p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
+            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
@@ -343,16 +351,18 @@ class BaseRouting(object):
             # print("Constant Speed . . .")
             # cur_vel_unit = self.CUR_VEL /  np.linalg.norm(self.CUR_VEL)
             # self.TARGET_VEL = cur_vel_unit *self.COMMANDS[1]._value
-            self.TARGET_VEL = np.zeros(3)
+            # self.TARGET_VEL = np.zeros(3)
+            self.STAT[1] = SpeedStatus.CONSTANT
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
             # hover
             if self.STAT[1] != SpeedStatus.HOVERING:
-                # print("*Activate Hovering Mode!")
+                
                 self.TARGET_POS = self.CUR_POS
                 self.TARGET_VEL = np.zeros(3)
                 self.HOVER_POS = self.CUR_POS
                 self.STAT[1] = SpeedStatus.HOVERING
+                # print(f"\n*Activate Hovering Mode!, target pos = {self.TARGET_POS}\n")
             else:
                 self.TARGET_POS = self.HOVER_POS
                 self.TARGET_VEL = np.zeros(3)
@@ -406,12 +416,13 @@ class BaseRouting(object):
             (3,N)-shaped array of floats containing the global route
         """
         self.GLOBAL_PATH = route
-        # print("Setting a global route")
+        print("Setting a global route")
     
     ################################################################################
     
     def _updateCurPos(self, pos):
         self.CUR_POS = pos
+        # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-30, cameraTargetPosition=pos)
         
     def _updateCurVel(self, vel):
         self.CUR_VEL = vel
@@ -434,7 +445,7 @@ class BaseRouting(object):
         # numRays = 1024
         # numRays = 100
         numRays = self.NUM_RAYS
-        rayLen = 1.25
+        rayLen = self.RAY_LEN_M
         # rayLen = 4
         rayHitColor = [1, 0, 0]
         rayMissColor = [0, 1, 0]
@@ -448,18 +459,18 @@ class BaseRouting(object):
         phi = np.arccos(1 - 2*indices/numRays)
         theta = np.pi * (1 + 5**0.5) * indices
 
-        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
+        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi)
         rayFrom = [self.CUR_POS for _ in range(numRays)]
         rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
         # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
-        results = p.rayTestBatch(rayFrom, rayTo)
+        results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
 
         # -- number of rays : check from len(results)
         # -- results is a tuple of tuples
         self.RAYS_INFO = self._extractRayInfo(results)
         
         # if (not replaceLines):
-        #   p.removeAllUserDebugItems()
+        # p.removeAllUserDebugItems()
         for i in range(numRays):
             hitObjectUid = results[i][0]
             
@@ -468,13 +479,20 @@ class BaseRouting(object):
                 # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
             else:
                 # This case, no detection of other fellow UAVs
-                if hitObjectUid!=0 and hitObjectUid not in drone_ids:
+                detectOtherUAV = 1
+                if detectOtherUAV:
+                    hitCondition = hitObjectUid!=0 
+                else:
+                    hitCondition = hitObjectUid!=0 and hitObjectUid not in drone_ids
+
+                if hitCondition:
                 # if hitObjectUid!=0:
                     detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
                     hitPosition = results[i][3]
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
                     
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1,lifeTime=0.1)
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1)
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1, lifeTime=0.1)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
 

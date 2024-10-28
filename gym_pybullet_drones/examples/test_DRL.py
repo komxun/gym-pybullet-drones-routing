@@ -4,6 +4,7 @@ import random
 import gymnasium as gym
 import numpy as np
 import torch
+import pybullet as p
 print(f"CUDA is available : {torch.cuda.is_available()}")
 # print(torch.cuda.get_device_name(0))
 from gym_pybullet_drones.utils.Logger import Logger
@@ -14,6 +15,9 @@ from gym_pybullet_drones.utils.enums import Physics, DroneModel
 # Custom DQN
 from gym_pybullet_drones.drl_custom.networks.FCQ import FCQ
 from gym_pybullet_drones.drl_custom.networks.FCDuelingQ import FCDuelingQ
+
+import pybullet_data
+
 
 DEFAULT_DRONES = DroneModel("cf2x")
 DEFAULT_RECORD_VISION = False
@@ -33,18 +37,26 @@ INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAU
 value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
 
 # TODO: automate reading the correct dimension of nS and nA
-numObserv = 1013
+numRays = 24
+numObserv = 133
 numAct = 5
 model = value_model_fn(numObserv, numAct)
 fileName = "Komsun_DRL/"
 # fileName += "Model-3actions-DuelingDDQN-10.17.2024_16.44.32.pth" # success
-
 # fileName += "Model-5actions-DuelingDDQN-10.17.2024_17.21.36.pth"
-# fileName += "Model-PER-10.18.2024_14.05.34.pth"
 # fileName += "Model-DuelingDDQN-10.18.2024_16.14.20.pth" # train for 1 hour -> still bad (wtf?)
 # fileName += "Model-DuelingDDQN-10.18.2024_16.45.31.pth"
 # fileName += "Model-PER-10.18.2024_17.35.31.pth" # partly work but weird
-fileName += "Model-PER-10.18.2024_19.08.42.pth"
+# fileName += "Model-DuelingDDQN-10.21.2024_11.07.26.pth"
+# fileName += "Model-PER-10.21.2024_15.35.27.pth" # Good
+# fileName += "Model-PER-10.21.2024_16.48.43.pth" # 60 minutes 1124 episodes
+# fileName += "Model-PER-10.22.2024_16.28.16.pth" # ok result
+# fileName += "Model-DuelingDDQN-10.22.2024_17.52.46.pth"  # Good!!!!
+# fileName += "Model-PER-10.23.2024_12.47.15.pth" # PER 40 min (success sometime)
+# fileName += "Model-DuelingDDQN-10.24.2024_15.34.32.pth"  # 90 minutes (stay hovering at the start (why?))
+# fileName += "Model-DuelingDDQN-10.25.2024_11.18.04.pth" # Very Good! (reduce num_rays to 10: nS=63, rayLen=1.25)
+# fileName += "Model-PER-10.25.2024_12.18.39.pth"  # Not so good
+fileName += "Model-DuelingDDQN-10.25.2024_15.48.01.pth"
 # CAUTION: If change number of actions -> need to also modify the action space in testing environment (AutoroutingRLAviary)!!!!
 model.load_state_dict(torch.load(fileName,map_location=torch.device('cpu'), weights_only=True))
 model.eval()
@@ -67,13 +79,17 @@ env = AutoroutingRLAviary(
                 record=DEFAULT_RECORD_VIDEO,
                 )
 
-
+p.setRealTimeSimulation(1) 
+p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+camSwitch = 1
+camSwitchFreq_step = 120
 for _ in range(20):
     START = time.time()
     state, _ = env.reset()
-    done = False
+    epEnd = False
     count = 0
-    while not done:
+    
+    while not epEnd:
         # Convert the state to tensor if needed
         state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
         # Get the action using the trained model 
@@ -89,10 +105,18 @@ for _ in range(20):
         next_state, reward, done, truncated, info = env.step(action)
         state = next_state
 
+        
+        if camSwitch>0:
+            p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=state[0:3])
+        else:
+            p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=state[0:3])
+        # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=state[0:3])
+        epEnd = done or truncated
         #### Printout ##############################################
         env.render()
 
         sync(count, START, env.CTRL_TIMESTEP)
+        camSwitch = -1*camSwitch if count%camSwitchFreq_step == 0 else camSwitch
         count += 1
 
 #### Close the environment #################################

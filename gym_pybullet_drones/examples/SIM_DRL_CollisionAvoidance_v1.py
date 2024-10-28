@@ -131,7 +131,7 @@ def run(
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone) for i in range(num_drones)]
+    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
     routeCounter = 1
 
     #### Run the simulation ####################################

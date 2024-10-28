@@ -14,7 +14,7 @@ from gym_pybullet_drones.drl_custom.networks.FCDuelingQ import FCDuelingQ
 from gym_pybullet_drones.drl_custom.exploration_strategies import EGreedyExpStrategy, GreedyStrategy
 from gym_pybullet_drones.drl_custom.utils import get_make_env_fn
 
-from gym_pybullet_drones.drl_custom.PER import PER
+from gym_pybullet_drones.drl_custom.value_based_DRL.PER import PER
 from gym_pybullet_drones.drl_custom.replay_buffers.PrioritizedReplayBuffer import PrioritizedReplayBuffer
 
 DEFAULT_GUI = True
@@ -48,10 +48,10 @@ best_agent, best_eval_score = None, float('-inf')
 for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-aviary-v0',
-        'gamma': 1,
-        'max_minutes': 10,
-        'max_episodes': 200,
-        'goal_mean_100_reward': 1000  # to be determined properly
+        'gamma': 0.995,  #before 0.95
+        'max_minutes': 20,
+        'max_episodes': 10000,
+        'goal_mean_100_reward': 110  # to be determined properly
     }
 
     value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
@@ -61,7 +61,7 @@ for seed in SEEDS:
 
     training_strategy_fn = lambda: EGreedyExpStrategy(init_epsilon=1.0,  
                                                       min_epsilon=0.3, 
-                                                      decay_steps=20000)
+                                                      decay_steps=100000)
     evaluation_strategy_fn = lambda: GreedyStrategy()
 
     # replay_buffer_fn = lambda: ReplayBuffer(max_size=10000, batch_size=64)

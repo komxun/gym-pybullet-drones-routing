@@ -18,9 +18,9 @@ class FCDuelingQ(nn.Module):
         self.output_layer = nn.Linear(hidden_dims[-1], output_dim)
 
         device = "cpu"
-        # if torch.cuda.is_available():
-        #     print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        #     device = "cuda:0"
+        if torch.cuda.is_available():
+            print(f"Using GPU: {torch.cuda.get_device_name(0)}")
+            device = "cuda:0"
         self.device = torch.device(device)
         self.to(self.device)
         
@@ -36,6 +36,7 @@ class FCDuelingQ(nn.Module):
     def forward(self, state):
         x = self._format(state)
         x = self.activation_fc(self.input_layer(x))
+        
         for hidden_layer in self.hidden_layers:
             x = self.activation_fc(hidden_layer(x))
         a = self.output_layer(x)
