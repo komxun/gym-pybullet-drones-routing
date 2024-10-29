@@ -37,7 +37,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 20
+DEFAULT_NUM_DRONES = 6
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
@@ -136,6 +136,7 @@ def run(
     routeCounter = 1
     for j in range(num_drones):
         routing[j].CUR_POS = INIT_XYZS[j,:]
+        routing[j].HOME_POS = INIT_XYZS[j,:]
         routing[j].DESTINATION = [10,0,0]
         routing[j].DESTINATION = DESTINS[j,:]
 
@@ -160,13 +161,16 @@ def run(
             
             if routing[j].REACH_DESTIN:
                 routing[j].reset()
-                routing[j].DESTINATION = INIT_XYZS[j,:]
+                tempDestin = routing[j].DESTINATION
+                tempHome = routing[j].HOME_POS
+                routing[j].DESTINATION = tempHome
+                routing[j].HOME_POS = tempDestin
                 routeCounter[j] = 1
                 
             #------- Compute route (waypoint) to follow ----------------
             foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
                                                   state = obs[j], 
-                                                  home_pos = routing[j].CUR_POS, 
+                                                  home_pos = routing[j].HOME_POS, 
                                                   target_pos = routing[j].DESTINATION,
                                                   speed_limit = env.SPEED_LIMIT,
                                                   obstacle_data = env.OBSTACLE_DATA,
@@ -196,11 +200,11 @@ def run(
             
             # p.resetDebugVisualizerCamera(cameraDistance=5, cameraYaw=0, cameraPitch=-92, cameraTargetPosition=routing[0].CUR_POS)
             # p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=obs[0][5], cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-            if camSwitch>0:
-                p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
-            else:
-                # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-                p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=0, cameraPitch=-91, cameraTargetPosition=routing[0].CUR_POS)
+            # if camSwitch>0:
+            #     p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
+            # else:
+            #     # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
+            #     p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=0, cameraPitch=-91, cameraTargetPosition=routing[0].CUR_POS)
         #### Log the simulation ####################################
         # for j in range(num_drones):
         #     logger.log(drone=j,

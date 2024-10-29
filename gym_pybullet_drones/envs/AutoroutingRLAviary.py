@@ -10,6 +10,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
     
     def __init__(self,
                  drone_model: DroneModel=DroneModel.CF2X,
+                 num_drones: int=1,
                  initial_xyzs=None,
                  initial_rpys=None,
                  physics: Physics=Physics.PYB,
@@ -51,7 +52,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
         self.TARGET_POS = np.array([0.2, 8, 1])
         self.EPISODE_LEN_SEC = 20
         super().__init__(drone_model=drone_model,
-                         num_drones=1,
+                         num_drones=num_drones,
                          initial_xyzs=initial_xyzs,
                          initial_rpys=initial_rpys,
                          physics=physics,
@@ -84,7 +85,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.5  #0.2
-        reward_choice = 8  # 4:best
+        reward_choice = 9  # 4:best  8: best
         prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
         d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
         h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
@@ -218,10 +219,8 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 # print(f"\n***Collided*** ret = {ret}\n")
         elif reward_choice == 8:
             # Positive reward
-            # step_cost = (1/d2destin)
             step_cost = (prevd2destin - d2destin) * (1/d2destin)
-            # print(f"step cost = {step_cost}")
-            collide_reward = -10*(1/d2destin)
+            collide_reward = -10 + step_cost
             destin_reward = 100*(1/d2destin)
 
             ret = step_cost
@@ -232,6 +231,20 @@ class AutoroutingRLAviary(ExtendedRLAviary):
             elif int(self.CONTACT_FLAGS[0]) == 1:
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
+        elif reward_choice == 9:
+            step_cost = (prevd2destin - d2destin) * (1/d2destin)
+            collide_reward = -10 + step_cost
+            destin_reward = 100*(1/d2destin)
+
+            ret = step_cost
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+                ret = destin_reward
+                print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
+
+            elif int(self.CONTACT_FLAGS[0]) == 1:
+                ret = collide_reward
+            elif any(self.routing[0].RAYS_INFO[:,1]<0.1):
+                ret = step_cost/2
 
         return ret
 

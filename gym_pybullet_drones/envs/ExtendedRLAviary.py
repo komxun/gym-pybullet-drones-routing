@@ -92,7 +92,7 @@ class ExtendedRLAviary(RoutingAviary):
                 
                 for j in range(len(self.routing)):
                     self.routing[j].HOME_POS = homePos
-                    self.routing[j].DESTINATION = destin
+                    self.routing[j].DESTINATION = np.array([destin[0], destin[1], destin[2]+j])
             else:
                 print("[ERROR] in BaseRLAviary.__init()__, no controller is available for the specified drone_model")
 
@@ -131,9 +131,9 @@ class ExtendedRLAviary(RoutingAviary):
 
         """
         if self.ACT_TYPE == ActionType.AUTOROUTING:
-            size = 1
-            for i in range(self.ACTION_BUFFER_SIZE):
-                self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
+            action_size = 1
+            for _ in range(self.ACTION_BUFFER_SIZE):
+                self.action_buffer.append(np.zeros((self.NUM_DRONES,action_size)))
             return spaces.Discrete(5)  # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
@@ -181,7 +181,7 @@ class ExtendedRLAviary(RoutingAviary):
         self.action_buffer.append(np.array([[float(action)]])) # Need to revise this to have N-number of drones
                                                         # (similar to [[discrete_act_lo] for i in range(self.NUM_DRONES)])])
         rpm = np.zeros((self.NUM_DRONES,4))
-        for k in range(1):  # k: num drone
+        for k in range(self.NUM_DRONES):  # k: num drone
             # Process action based on ACT_TYPE
             if self.ACT_TYPE == ActionType.AUTOROUTING:
                 state = self._getDroneStateVector(k)
@@ -312,8 +312,8 @@ class ExtendedRLAviary(RoutingAviary):
                 obs_upper_bound = np.hstack([obs_upper_bound, np.array([list(ray_hi) for _ in range(self.NUM_DRONES)])])
             ############################################################
             # added 20241015
-            obs_lower_bound =  obs_lower_bound.reshape(obs_lower_bound.shape[1],)
-            obs_upper_bound =  obs_upper_bound.reshape(obs_upper_bound.shape[1],)
+            obs_lower_bound =  obs_lower_bound.reshape(obs_lower_bound.shape[1]*obs_lower_bound.shape[0],)
+            obs_upper_bound =  obs_upper_bound.reshape(obs_upper_bound.shape[1]*obs_upper_bound.shape[0],)
             return spaces.Box(low=obs_lower_bound, high=obs_upper_bound, dtype=np.float32)
         else:
             print("[ERROR] in BaseRLAviary._observationSpace()")
@@ -347,12 +347,14 @@ class ExtendedRLAviary(RoutingAviary):
             ############################################################
             #### OBS SPACE OF SIZE 12
             obs_12 = np.zeros((self.NUM_DRONES,12))
+            dum = np.zeros((self.NUM_DRONES,self.routing[0].NUM_RAYS*5))
             for i in range(self.NUM_DRONES):
                 #obs = self._clipAndNormalizeState(self._getDroneStateVector(i))
                 obs = self._getDroneStateVector(i)
                 # (x, y, z, R, P, Y, vx, vy, vz, wx, wy,)
                 obs_12[i, :] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
-                self.sensor_buffer.append(np.array([list(self.routing[i].RAYS_INFO)])) 
+                dum[i,:] = np.array([list(self.routing[i].RAYS_INFO.reshape(5*self.routing[i].NUM_RAYS,))])
+            self.sensor_buffer.append(dum) 
                 
             ret = np.array([obs_12[i, :] for i in range(self.NUM_DRONES)]).astype('float32')
             #### Add action buffer to observation #######################
@@ -360,13 +362,13 @@ class ExtendedRLAviary(RoutingAviary):
                 ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
          
             # #++++++ Add distance-to-destination +++++++++++++++++++++++++
-            ret = np.hstack([ret, np.array([[self.routing[i].getDistanceToDestin()] for i in range(self.NUM_DRONES)])])
+            ret = np.hstack([ret, np.array([[self.routing[i].getDistanceToDestin()] for i in range(self.NUM_DRONES)])]).astype('float32')
           
             # #++++++ Add sensor buffer to observation  +++++++++++++++++++
             for i in range(self.SENSOR_BUFFER_SIZE):
-                ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
+                ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])]).astype('float32')
             ret = ret.reshape(ret.shape[1], ).astype('float32')
-            return ret
+            return ret.astype('float32')
             ############################################################
         else:
             print("[ERROR] in ExtendedRLAviary._computeObs()")

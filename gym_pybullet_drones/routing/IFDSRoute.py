@@ -134,7 +134,7 @@ class IFDSRoute(BaseRouting):
         curSpeed = np.linalg.norm(self.CUR_VEL)
         # print(f"\n Current Speed = {curSpeed}\n")
         
-        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.1:
+        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.2:
             print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
             self.REACH_DESTIN = 1

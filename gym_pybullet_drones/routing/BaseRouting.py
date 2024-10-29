@@ -99,11 +99,11 @@ class BaseRouting(object):
         self.DETECTED_OBS_DATA = {}
 
         self.NUM_RAYS = 24
-        self.RAY_LEN_M = 1.25
-        self.RAYS_INFO = np.zeros(5*self.NUM_RAYS,)
+        self.RAY_LEN_M = 1.5
+        self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
         
         
-        
+    
         
         self.reset()
 
@@ -211,7 +211,6 @@ class BaseRouting(object):
 
     def _plotRoute(self, path):
         pathColor = [0, 0, 1]
-        print(f"drone id = {self.DRONE_ID}")
         if self.DRONE_ID ==0:
             p.removeAllUserDebugItems()
         for i in range(0, path.shape[1]-1, 1):
@@ -517,7 +516,7 @@ class BaseRouting(object):
             hit_pos = result[3]
             tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
         
-        return np.array(tempList)
+        return np.array(tempList).reshape(self.NUM_RAYS, 5)
     
     def _processDetection(self, obstacle_data):
         """

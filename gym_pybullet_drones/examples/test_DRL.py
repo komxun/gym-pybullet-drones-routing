@@ -54,9 +54,10 @@ fileName = "Komsun_DRL/"
 # fileName += "Model-DuelingDDQN-10.22.2024_17.52.46.pth"  # Good!!!!
 # fileName += "Model-PER-10.23.2024_12.47.15.pth" # PER 40 min (success sometime)
 # fileName += "Model-DuelingDDQN-10.24.2024_15.34.32.pth"  # 90 minutes (stay hovering at the start (why?))
-# fileName += "Model-DuelingDDQN-10.25.2024_11.18.04.pth" # Very Good! (reduce num_rays to 10: nS=63, rayLen=1.25)
+# fileName += "Model-DuelingDDQN-10.25.2024_11.18.04.pth" # Very Good! (reduce num_rays to 10: nS=63, rayLen=1.25, reward_choice=8)
 # fileName += "Model-PER-10.25.2024_12.18.39.pth"  # Not so good
-fileName += "Model-DuelingDDQN-10.25.2024_15.48.01.pth"
+fileName += "Model-DuelingDDQN-10.28.2024_17.44.21.pth"  # Very Good (num_rays = 24: nS=133, rayLen=1.5, reward_choice=8 (near hit ok))
+# fileName += "Model-DuelingDDQN-10.28.2024_18.41.40.pth"
 # CAUTION: If change number of actions -> need to also modify the action space in testing environment (AutoroutingRLAviary)!!!!
 model.load_state_dict(torch.load(fileName,map_location=torch.device('cpu'), weights_only=True))
 model.eval()
