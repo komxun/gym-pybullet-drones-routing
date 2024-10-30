@@ -85,7 +85,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.5  #0.2
-        reward_choice = 9  # 4:best  8: best
+        reward_choice = 8  # 4:best  8: best
         prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
         d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
         h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
@@ -218,7 +218,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
         elif reward_choice == 8:
-            # Positive reward
+            """Positive reward design: reach destination asap"""
             step_cost = (prevd2destin - d2destin) * (1/d2destin)
             collide_reward = -10 + step_cost
             destin_reward = 100*(1/d2destin)
@@ -232,12 +232,13 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
         elif reward_choice == 9:
+            """Encourage keeping distance > 10% of ray (0.15 m) away from obstacles"""
             step_cost = (prevd2destin - d2destin) * (1/d2destin)
             collide_reward = -10 + step_cost
             destin_reward = 100*(1/d2destin)
 
             ret = step_cost
-            if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+            if np.linalg.norm(self.TARGET_POS-state[0:3]) <= reachThreshold_m:
                 ret = destin_reward
                 print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
 
@@ -265,7 +266,7 @@ class AutoroutingRLAviary(ExtendedRLAviary):
         
         reachThreshold_m = 0.5  #0.0001
 
-        if np.linalg.norm(self.TARGET_POS-state[0:3]) < reachThreshold_m:
+        if np.linalg.norm(self.TARGET_POS-state[0:3]) <= reachThreshold_m:
             return True
         elif int(self.CONTACT_FLAGS[0]) == 1:
             return True

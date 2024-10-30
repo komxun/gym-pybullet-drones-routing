@@ -29,9 +29,10 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
-        # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 8.5
-        self.SIGMA0_IFDS = 0.5
+        self.RHO0_IFDS = 2.5
+        # self.RHO0_IFDS = 8.5
+        self.SIGMA0_IFDS = 2
+        self.ALPHA = 0
         self.SF_IFDS = 0
         self.TARGET_THRESH = 0.1
         self.SIM_MODE = 2
@@ -86,6 +87,24 @@ class IFDSRoute(BaseRouting):
         -------
 
         """
+        if self.PATH_OPTION == 1:
+            self.ALPHA = 0
+        elif self.PATH_OPTION == 2:
+            self.ALPHA = (1/4)*np.pi
+        elif self.PATH_OPTION == 3:
+            self.ALPHA = (2/4)*np.pi
+        elif self.PATH_OPTION == 4:
+            self.ALPHA = (3/4)*np.pi
+        elif self.PATH_OPTION == 5:
+            self.ALPHA = np.pi
+        elif self.PATH_OPTION == 6:
+            self.ALPHA = (5/4)*np.pi
+        elif self.PATH_OPTION == 7:
+            self.ALPHA = (6/4)*np.pi
+        elif self.PATH_OPTION == 8:
+            self.ALPHA = (7/4)*np.pi
+        else:
+            print("[Error] in IFDSRoute: Invalid PATH_OPTION")
         # p.removeAllUserDebugItems()
         self._updateCurPos(cur_pos)
         self._updateCurVel(cur_vel)
@@ -135,7 +154,7 @@ class IFDSRoute(BaseRouting):
         # print(f"\n Current Speed = {curSpeed}\n")
         
         if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.2:
-            print("Reaching destination -> Stopping . . .")
+            # print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
             self.REACH_DESTIN = 1
             # acceleration = 0
@@ -448,7 +467,15 @@ class IFDSRoute(BaseRouting):
             Gamma = CalcGamma()
             (dGdx, dGdy, dGdz) = CalcDg()
             n = np.array([[dGdx], [dGdy], [dGdz]])
-            t = np.array([[dGdy],[-dGdx], [0]])
+
+            rot = np.array([
+                [dGdy,  dGdx*dGdz, dGdx],
+                [-dGdx, dGdy*dGdz, dGdy],
+                [0, -(dGdx**2)-(dGdy**2), dGdz]])
+            
+            tprime = np.array([[np.cos(self.ALPHA)], [np.sin(self.ALPHA)], [0]])
+            t = np.matmul(rot,tprime)
+            # t = np.array([[dGdy],[-dGdx], [0]])
             origin = np.array([x0, y0, z0])
             # Add a new object to the list
             dType = "Dynamic" if isDynamic else "Static"

@@ -19,7 +19,15 @@ class SpeedStatus(Enum):
 class RouteCommandFlag(Enum):
     CHANGE = "change_route"
     FOLLOW_GLOBAL = "follow_global"
-    FOLLOW_LOCAL  = "follow_local"
+    FOLLOW_LOCAL_1 = "follow_local_1"
+    FOLLOW_LOCAL_2 = "follow_local_2"
+    FOLLOW_LOCAL_3 = "follow_local_3"
+    FOLLOW_LOCAL_4 = "follow_local_4"
+    FOLLOW_LOCAL_5 = "follow_local_5"
+    FOLLOW_LOCAL_6 = "follow_local_6"
+    FOLLOW_LOCAL_7 = "follow_local_7"
+    FOLLOW_LOCAL_8 = "follow_local_8"
+
     NONE = "none"
 class SpeedCommandFlag(Enum):
     ACCEL         = "accelerate"
@@ -93,6 +101,7 @@ class BaseRouting(object):
         
         self.COMMANDS = [Commander(RouteCommandFlag, "none"), Commander(SpeedCommandFlag, "none")]
         self.SIM_MODE = 2
+        self.PATH_OPTION = 1
         self._resetAllCommands()
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
@@ -323,9 +332,38 @@ class BaseRouting(object):
         elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_GLOBAL.value:
             self.STAT[0] = RouteStatus.GLOBAL
             self.SIM_MODE = 2
-        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_1.value:
             self.STAT[0] = RouteStatus.LOCAL
             self.SIM_MODE = 1
+            self.PATH_OPTION = 1
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_2.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 2
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_3.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 3
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_4.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 4
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_5.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 5
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_6.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 6
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_7.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 7
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL_8.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = 8
         else:
             print("[Error] in _processRouteCommand()")
             

@@ -39,7 +39,7 @@ value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
 # TODO: automate reading the correct dimension of nS and nA
 numRays = 24
 numObserv = 133
-numAct = 5
+numAct = 11
 model = value_model_fn(numObserv, numAct)
 fileName = "Komsun_DRL/"
 # fileName += "Model-3actions-DuelingDDQN-10.17.2024_16.44.32.pth" # success
@@ -56,8 +56,9 @@ fileName = "Komsun_DRL/"
 # fileName += "Model-DuelingDDQN-10.24.2024_15.34.32.pth"  # 90 minutes (stay hovering at the start (why?))
 # fileName += "Model-DuelingDDQN-10.25.2024_11.18.04.pth" # Very Good! (reduce num_rays to 10: nS=63, rayLen=1.25, reward_choice=8)
 # fileName += "Model-PER-10.25.2024_12.18.39.pth"  # Not so good
-fileName += "Model-DuelingDDQN-10.28.2024_17.44.21.pth"  # Very Good (num_rays = 24: nS=133, rayLen=1.5, reward_choice=8 (near hit ok))
-# fileName += "Model-DuelingDDQN-10.28.2024_18.41.40.pth"
+# fileName += "Model-DuelingDDQN-10.28.2024_17.44.21.pth"  # Very Good (num_rays = 24: nS=133, rayLen=1.5, reward_choice=9 (near hit not ok))
+# fileName += "Model-DuelingDDQN-10.29.2024_17.50.05.pth"  # 11 actions (num_rays = 24: nS=133, rayLen=1.5, reward_choice=8 ())
+fileName += "Model-DuelingDDQN-10.29.2024_18.33.13.pth"  # Smarter: very good (num_rays = 24: nS=133, rayLen=1.5, reward_choice=8 ())
 # CAUTION: If change number of actions -> need to also modify the action space in testing environment (AutoroutingRLAviary)!!!!
 model.load_state_dict(torch.load(fileName,map_location=torch.device('cpu'), weights_only=True))
 model.eval()
