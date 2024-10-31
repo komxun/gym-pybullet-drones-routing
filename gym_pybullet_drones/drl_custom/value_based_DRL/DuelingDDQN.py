@@ -79,7 +79,7 @@ class DuelingDDQN():
         torch.manual_seed(self.seed) ; np.random.seed(self.seed) ; random.seed(self.seed)
     
         nS, nA = env.observation_space.shape[0], env.action_space.n
-        print(f"nA = {nA}")
+        print(f"nS = {nS}, nA = {nA}")
 
         self.episode_timestep = []
         self.episode_reward = []

@@ -32,6 +32,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
+from gym_pybullet_drones.envs.AutoroutingSARLAviary import AutoroutingSARLAviary
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
@@ -104,7 +105,18 @@ def run(
     #                      user_debug_gui=user_debug_gui
     #                      )
     
-    env = AutoroutingRLAviary(
+    # env = AutoroutingRLAviary(
+    #              drone_model = drone,
+    #              num_drones = DEFAULT_NUM_DRONES, 
+    #              initial_xyzs=INIT_XYZS,
+    #              initial_rpys=INIT_RPYS,
+    #              physics= physics,
+    #              pyb_freq=simulation_freq_hz,
+    #              ctrl_freq=control_freq_hz,
+    #              gui=gui,
+    #              record=record_video,
+    #              )
+    env = AutoroutingSARLAviary(
                  drone_model = drone,
                  num_drones = DEFAULT_NUM_DRONES, 
                  initial_xyzs=INIT_XYZS,
@@ -115,7 +127,6 @@ def run(
                  gui=gui,
                  record=record_video,
                  )
-    
 
     #### Obtain the PyBullet Client ID from the environment ####
     PYB_CLIENT = env.getPyBulletClient()
@@ -144,8 +155,8 @@ def run(
         #### Make it rain rubber ducks #############################
         # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
         # ======Random Action!!=========
-        # action = random.randint(6, 10)
-        action = 4
+        action = random.randint(0, 10)
+        # action = 4
         # if i<80:
         #     action = 2
         # else:

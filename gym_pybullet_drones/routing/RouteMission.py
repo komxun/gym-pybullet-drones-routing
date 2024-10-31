@@ -25,9 +25,9 @@ class RouteMission:
     def _singleAgentMission(self, scenario):
         if scenario == 1:
             """Simple straight line"""
-            INIT_XYZS = np.array([0, 0, 0.5])
-            INIT_RPYS = np.array([0, 0, 0])
-            DESTINS   = np.array([0, 12, 0.5])
+            INIT_XYZS = np.array([0, 0, 0.5]).reshape(1,3)
+            INIT_RPYS = np.array([0, 0, 0]).reshape(1,3)
+            DESTINS   = np.array([0, 12, 0.5]).reshape(1,3)
 
             WAYPOINTS = np.vstack((INIT_XYZS, DESTINS))
         else:
@@ -49,19 +49,19 @@ class RouteMission:
         
         elif scenario == 2:
             """Random straight lines in an oval"""
-            H_STEP = 0.005
-            R = 2
+            H_STEP = 0.1
+            R = 2  # 2
             R_D = 4
+            ORIGIN = [0,4,1]
             # Initialize empty arrays
             INIT_XYZS = np.zeros((num_drones, 3))
             INIT_RPYS = np.zeros((num_drones, 3))
             DESTINS = np.zeros((num_drones, 3))
             WAYPOINTS = []
 
-            INIT_XYZS[0] = [0,0,0.8]
+            INIT_XYZS[0] = [0,-0.7,ORIGIN[2]]
             INIT_RPYS[0] = [0,0,0]
             DESTINS[0] = [0,5,1]
-            ORIGIN = [0,4,1]
             WAYPOINTS.append(np.vstack((INIT_XYZS[0], DESTINS[0])))
 
             for i in range(1, num_drones):

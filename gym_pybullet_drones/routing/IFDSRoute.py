@@ -29,7 +29,7 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
-        self.RHO0_IFDS = 4.5
+        self.RHO0_IFDS = 6.5
         # self.RHO0_IFDS = 8.5
         self.SIGMA0_IFDS = 2
         self.ALPHA = 0
@@ -331,8 +331,9 @@ class IFDSRoute(BaseRouting):
                     elif ntu >= 0 and self.SF_IFDS == 0:
                         M = np.identity(3)
                     else:
-                        raise ValueError("[Error] in _CalcUBar in IFDSRoute")
-                        # print("error in _CalcUBar")
+                        # raise ValueError("[Error] in _CalcUBar in IFDSRoute")
+                        print("error in _CalcUBar")
+                        M = np.identity(3)
                         # UBar = u
                         
                     # Calculate Weight
@@ -484,7 +485,8 @@ class IFDSRoute(BaseRouting):
         numObj = obstacles_pos.shape[0]
 
         for j in range(numObj):
-            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 0.8*obstacles_size[j][0])
+            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 0.8*obstacles_size[j][0])
+            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
             # Shape(0, "cylinder", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
     
         return Obj

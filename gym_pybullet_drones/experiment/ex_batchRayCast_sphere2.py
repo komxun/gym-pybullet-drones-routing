@@ -40,9 +40,9 @@ rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 40
+numRays = 24
 
-rayLen = 5
+rayLen = 1.5
 
 rayHitColor = [1, 0, 0]
 rayMissColor = [0, 1, 0]

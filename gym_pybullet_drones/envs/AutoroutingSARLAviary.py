@@ -1,10 +1,10 @@
 import numpy as np
 
-from gym_pybullet_drones.envs.ExtendedRLAviary import ExtendedRLAviary
+from gym_pybullet_drones.envs.ExtendedSARLAviary import ExtendedSARLAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType
 from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, RouteStatus
 
-class AutoroutingRLAviary(ExtendedRLAviary):
+class AutoroutingSARLAviary(ExtendedSARLAviary):
     """Single agent RL problem: hover at position."""
 
     ################################################################################
@@ -141,12 +141,12 @@ class AutoroutingRLAviary(ExtendedRLAviary):
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
             else:
-                if self.routing[0].STAT[0] == RouteStatus.LOCAL:
-                # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+                if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
                     
                     # ret = step_reward/2
-                    ret = step_reward/4
-                    # ret = 0
+                    # ret = step_reward/4
+                    ret = 0
                     # print(f"ALERT: using local route, ret = {ret}\n")
                 else:
                     

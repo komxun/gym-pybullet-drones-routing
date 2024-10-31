@@ -35,9 +35,9 @@ from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag, SpeedStatus
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
+from gym_pybullet_drones.routing.RouteMission import RouteMission
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 6
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
@@ -49,6 +49,12 @@ DEFAULT_CONTROL_FREQ_HZ = 60
 DEFAULT_DURATION_SEC = 90
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
+DEFAULT_NUM_DRONES = 20
+DEFAULT_SCENARIO = 2
+
+MISSION = RouteMission()
+MISSION.generateMission(numDrones=DEFAULT_NUM_DRONES,scenario=DEFAULT_SCENARIO)
+
 
 def run(
         drone=DEFAULT_DRONES,
@@ -66,40 +72,9 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
-    H = 0.1
-    H_STEP = 0.02
-    R = 2
-    R_D = 4
-    # INIT_XYZS = np.array([[R*np.cos((i/6)*2*np.pi+np.pi/2), R*np.sin((i/6)*2*np.pi+np.pi/2)-R, H+i*H_STEP] for i in range(num_drones)])
-    # INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
-    # INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
-    # Initialize empty arrays
-    INIT_XYZS = np.zeros((num_drones, 3))
-    INIT_RPYS = np.zeros((num_drones, 3))
-    DESTINS = np.zeros((num_drones, 3))
-
-    # Loop over the range of num_drones
-    INIT_XYZS[0] = [0,0,0.8]
-    INIT_RPYS[0] = [0,0,0]
-    DESTINS[0] = [0,5,1]
-    ORIGIN = [0,4,1]
-
-    for i in range(1, num_drones):
-        # Initialize INIT_XYZS
-        INIT_XYZS[i] = [ORIGIN[0]+(R)*np.cos((i/num_drones)*2*np.pi+np.pi/2),
-                        ORIGIN[1]+(R)*np.sin((i/num_drones)*2*np.pi+np.pi/2)-(R), 
-                        ORIGIN[2]+H_STEP]
-        # INIT_XYZS[i] = [ORIGIN[0]+(R)*np.cos((i/6)*2*np.pi+np.pi/2),
-        #                 ORIGIN[1]+(R)*np.sin((i/6)*2*np.pi+np.pi/2)-(R), 
-        #                 ORIGIN[2]+H_STEP*i]
-        
-        # Initialize INIT_RPYS
-        INIT_RPYS[i] = [0, 0, i * (np.pi/2)/num_drones]
-        
-        # Initialize DESTINS
-        DESTINS[i] = [ORIGIN[0]+(R_D)*np.cos((i/num_drones)*2*np.pi+np.pi/2+1*np.pi/2),
-                        ORIGIN[1]+np.sin((i/num_drones)*2*np.pi+np.pi/2+3*np.pi/2)-(R_D), 
-                        ORIGIN[2]]
+    INIT_XYZS = MISSION.INIT_XYZS
+    INIT_RPYS = MISSION.INIT_RPYS
+    DESTINS = MISSION.DESTINS
     #### Create the environment ################################
     
     env = RoutingAviary(drone_model=drone,
@@ -159,13 +134,13 @@ def run(
         #### Compute control for the current way point #############
         for j in range(num_drones):
             
-            # if routing[j].REACH_DESTIN:
-            #     routing[j].reset()
-            #     tempDestin = routing[j].DESTINATION
-            #     tempHome = routing[j].HOME_POS
-            #     routing[j].DESTINATION = tempHome
-            #     routing[j].HOME_POS = tempDestin
-            #     routeCounter[j] = 1
+            if routing[j].REACH_DESTIN:
+                routing[j].reset()
+                tempDestin = routing[j].DESTINATION
+                tempHome = routing[j].HOME_POS
+                routing[j].DESTINATION = tempHome
+                routing[j].HOME_POS = tempDestin
+                routeCounter[j] = 1
                 
             #------- Compute route (waypoint) to follow ----------------
             foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 

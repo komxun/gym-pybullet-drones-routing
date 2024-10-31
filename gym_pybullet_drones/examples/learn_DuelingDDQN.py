@@ -35,7 +35,7 @@ from gym_pybullet_drones.drl_custom.replay_buffers.ReplayBuffer import ReplayBuf
 
 # DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
 # DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
-DEFAULT_AGENTS = 10
+
 # DEFAULT_MA = False
 # DEFAULT_PHYSICS = Physics("pyb")
 # DEFAULT_CONTROL_FREQ_HZ = 60
@@ -53,18 +53,27 @@ EPS = 1e-6
 BEEP = lambda: os.system("printf '\a'")
 RESULTS_DIR = os.path.join('..', 'results')
 # SEEDS = (12, 34, 56, 78, 90)
-SEEDS = (12,)
+SEEDS = (1,)
+DEFAULT_AGENTS = 16
 
 
 dueling_ddqn_results = []
 dueling_ddqn_agents, best_dueling_ddqn_agent_key, best_eval_score = {}, None, float('-inf')
 for seed in SEEDS:
+    # DEFAULT_AGENTS += 5
+    # environment_settings = {
+    #     'env_name': 'autorouting-aviary-v0',
+    #     'gamma': 0.9, # 0.995
+    #     'max_minutes': 5,
+    #     'max_episodes': 10000,
+    #     'goal_mean_100_reward': 3000  # 150 to be determined properly
+    # }
     environment_settings = {
-        'env_name': 'autorouting-aviary-v0',
+        'env_name': 'autorouting-sa-aviary-v0',
         'gamma': 0.9, # 0.995
-        'max_minutes': 5,
+        'max_minutes': 10,
         'max_episodes': 10000,
-        'goal_mean_100_reward': 3000  # 150 to be determined properly
+        'goal_mean_100_reward': 1500  # 150 to be determined properly
     }
     
     # value_model_fn = lambda nS, nA: FCQ(nS, nA, hidden_dims=(512,128))

@@ -16,15 +16,15 @@ p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
 #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,0)
 
 #p.loadURDF("samurai.urdf")
-r2d2id = p.loadURDF("r2d2.urdf", [3, 3, 1])
+r2d2id = p.loadURDF("r2d2.urdf", [0, 0, 1])
 
 rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 24
+numRays = 100
 
-rayLen = 5
+rayLen = 1.5
 
 rayHitColor = [1, 0, 0]
 rayMissColor = [0, 1, 0]
@@ -55,30 +55,30 @@ for i in range(numRays):
 # if (not useGui):
 #   timingLog = p.startStateLogging(p.STATE_LOGGING_PROFILE_TIMINGS, "rayCastBench.json")
 
-numSteps = 10
+numSteps = 60
 if (useGui):
   numSteps = 327680
 
 for i in range(numSteps):
-    p.stepSimulation()
-#   for j in range(8):
-    results = p.rayTestBatch(rayFrom, rayTo, numThreads = 1)
+  p.stepSimulation()
+  #   for j in range(8):
+  results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
 
   #for i in range (10):
   #	p.removeAllUserDebugItems()
 
   
-if (not replaceLines):
-    p.removeAllUserDebugItems()
+  if (not replaceLines):
+      p.removeAllUserDebugItems()
 
-for i in range(numRays):
-    hitObjectUid = results[i][0]
-    if (hitObjectUid < 0):
-        hitPosition = [0, 0, 0]
-        p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i])
-    else:
-        hitPosition = results[i][3]
-        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
+  for i in range(numRays):
+      hitObjectUid = results[i][0]
+      if (hitObjectUid < 0):
+          hitPosition = [0, 0, 0]
+          p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lineWidth=2.5)
+      else:
+          hitPosition = results[i][3]
+          p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lineWidth=2.5)
 
   #time.sleep(1./240.)
 kuy = [results[x] for x in range(len(results)) if results[x][0]  != -1]

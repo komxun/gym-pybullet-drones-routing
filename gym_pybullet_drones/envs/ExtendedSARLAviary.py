@@ -12,7 +12,7 @@ from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 
-class ExtendedRLAviary(RoutingAviary):
+class ExtendedSARLAviary(RoutingAviary):
     """Base single and multi-agent environment class for reinforcement learning."""
     
     ################################################################################
@@ -66,11 +66,13 @@ class ExtendedRLAviary(RoutingAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, waypoint or velocity with PID control; etc.)
 
         """
+        self.NUM_OTHER_DRONES = num_drones - 1
         # =============================================================================
         homePos =  np.array([0,0,0.5]) 
         destin  =  np.array([0.2, 10, 1])
         self.HOME_POS = homePos
         self.DESTIN = destin
+        num_drones_total = num_drones 
         # =============================================================================
 
         #### Create a buffer for the last .5 sec of actions ########
@@ -87,8 +89,8 @@ class ExtendedRLAviary(RoutingAviary):
         if act in [ActionType.PID, ActionType.VEL, ActionType.ONE_D_PID, ActionType.AUTOROUTING]:
             os.environ['KMP_DUPLICATE_LIB_OK']='True'
             if drone_model in [DroneModel.CF2X, DroneModel.CF2P]:
-                self.ctrl = [DSLPIDControl(drone_model=DroneModel.CF2X) for i in range(num_drones)]
-                self.routing = [IFDSRoute(drone_model=DroneModel.CF2X, drone_id=i) for i in range(num_drones)]
+                self.ctrl = [DSLPIDControl(drone_model=DroneModel.CF2X) for i in range(num_drones_total)]
+                self.routing = [IFDSRoute(drone_model=DroneModel.CF2X, drone_id=i) for i in range(num_drones_total)]
                 
                 for j in range(len(self.routing)):
                     self.routing[j].HOME_POS = homePos
@@ -102,7 +104,7 @@ class ExtendedRLAviary(RoutingAviary):
         self.SENSOR_BUFFER_SIZE = 1   # 5: five informations from raycast (obj_id, hit_fraction, (hit_xyz))
         self.sensor_buffer = deque(maxlen=self.SENSOR_BUFFER_SIZE)
         super().__init__(drone_model=drone_model,
-                         num_drones=num_drones,
+                         num_drones=num_drones_total,
                          neighbourhood_radius=neighbourhood_radius,
                          initial_xyzs=initial_xyzs,
                          initial_rpys=initial_rpys,
@@ -133,7 +135,7 @@ class ExtendedRLAviary(RoutingAviary):
         if self.ACT_TYPE == ActionType.AUTOROUTING:
             action_size = 1
             for _ in range(self.ACTION_BUFFER_SIZE):
-                self.action_buffer.append(np.zeros((self.NUM_DRONES,action_size)))
+                self.action_buffer.append(np.zeros((1,action_size)))
             return spaces.Discrete(11, start = 0) # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
@@ -145,12 +147,12 @@ class ExtendedRLAviary(RoutingAviary):
             else:
                 print("[ERROR] in BaseRLAviary._actionSpace()")
                 exit()
-            act_lower_bound = np.array([-1*np.ones(size) for i in range(self.NUM_DRONES)])
-            act_upper_bound = np.array([+1*np.ones(size) for i in range(self.NUM_DRONES)])
+            act_lower_bound = np.array([-1*np.ones(size) for i in range(1)])
+            act_upper_bound = np.array([+1*np.ones(size) for i in range(1)])
             #
             # for i in range(self.ACTION_BUFFER_SIZE):
-            #     self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-            self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
+            #     self.action_buffer.append(np.zeros((1,size)))
+            self.action_buffer.append(np.zeros((1,size)))
             return spaces.Box(low=act_lower_bound, high=act_upper_bound, dtype=np.float32)
 
     ################################################################################
@@ -181,15 +183,12 @@ class ExtendedRLAviary(RoutingAviary):
         self.action_buffer.append(np.array([[float(action)]])) # Need to revise this to have N-number of drones
                                                         # (similar to [[discrete_act_lo] for i in range(self.NUM_DRONES)])])
                                                         
-        rpm = np.zeros((self.NUM_DRONES,4))
+        rpm = np.zeros((self.NUM_DRONES, 4))
         for k in range(self.NUM_DRONES):  # k: num drone
             # Process action based on ACT_TYPE
             if self.ACT_TYPE == ActionType.AUTOROUTING:
                 state = self._getDroneStateVector(k)
-            
-                # Initially set to accelerate
-                # self.routing._setCommand(SpeedCommandFlag, "accelerate", 0.02)
-                # action = 1
+
                 
                 #------- Compute route (waypoint) to follow ----------------
                 foundPath, path = self.routing[k].computeRouteFromState(route_timestep=self.routing[k].route_counter, 
@@ -209,68 +208,78 @@ class ExtendedRLAviary(RoutingAviary):
                         raise ValueError("[Error] Global route was not found. Mission aborted.")        
 
                 # ==== PASSIVE BEHAVIOUR ======
+                if k != 0:
+                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
                 # ======= 3 Actions ==================================================
-                # self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                # self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
                 # if action ==0:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0.0)
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 0.0)
                 # elif action ==1:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", -4)
                 # elif action ==2:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "hover")
 
                 # ======= 5 Actions ==================================================
                 
                 # if action ==0:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                #     self.routing[0]._setCommand(RouteCommandFlag, "follow_global")
                 # elif action ==1:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                #     self.routing[k]._setCommand(RouteCommandFlag, "follow_local_1")
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                #     self.routing[0]._setCommand(RouteCommandFlag, "follow_local_1")
                 # elif action ==2:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
                 # elif action ==3:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", -4)
                 # elif action==4:
-                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+                #     self.routing[k0]._setCommand(SpeedCommandFlag, "hover")
 
                 # ======= 11 Actions ==================================================
+
                 if action ==0:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
                 elif action ==1:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", -4)
                 elif action ==2:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "hover")
+                    self.routing[0]._setCommand(SpeedCommandFlag, "hover")
                 elif action ==3:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
                 elif action==4:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 1)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 1)
                 elif action==5:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 2)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 2)
                 elif action==6:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 3)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 3)
                 elif action==7:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 4)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 4)
                 elif action==8:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 5)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 5)
                 elif action==9:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 6)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 6)
                 elif action==10:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 7)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 7)
                 elif action==11:
-                    self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 8)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_local", 8)
                 
 
                 
-                
+                # self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                # if action ==0:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0)
+                # elif action ==1:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)
+                # elif action==2:
+                #     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                     
                 #     if self.routing.STAT:
                 #         print("Alert: no route found!--> following global route")
@@ -307,15 +316,15 @@ class ExtendedRLAviary(RoutingAviary):
         if self.OBS_TYPE == ObservationType.RGB:
             return spaces.Box(low=0,
                               high=255,
-                              shape=(self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0], 4), dtype=np.uint8)
+                              shape=(1, self.IMG_RES[1], self.IMG_RES[0], 4), dtype=np.uint8)
         elif self.OBS_TYPE == ObservationType.KIN:
             ############################################################
             #### OBS SPACE OF SIZE 12
             #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ
             lo = -np.inf
             hi = np.inf
-            obs_lower_bound = np.array([[lo,lo,0, lo,lo,lo,lo,lo,lo,lo,lo,lo] for i in range(self.NUM_DRONES)])
-            obs_upper_bound = np.array([[hi,hi,hi,hi,hi,hi,hi,hi,hi,hi,hi,hi] for i in range(self.NUM_DRONES)])
+            obs_lower_bound = np.array([[lo,lo,0, lo,lo,lo,lo,lo,lo,lo,lo,lo] for i in range(1)])
+            obs_upper_bound = np.array([[hi,hi,hi,hi,hi,hi,hi,hi,hi,hi,hi,hi] for i in range(1)])
             #### Add action buffer to observation space ################
             act_lo = -1
             act_hi = +1
@@ -325,33 +334,33 @@ class ExtendedRLAviary(RoutingAviary):
                 if self.ACT_TYPE == ActionType.AUTOROUTING:
                     discrete_act_lo = 0
                     discrete_act_hi = 10
-                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(self.NUM_DRONES)])])
-                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(self.NUM_DRONES)])])
+                    obs_lower_bound = np.hstack([obs_lower_bound, np.array([[discrete_act_lo] for i in range(1)])])
+                    obs_upper_bound = np.hstack([obs_upper_bound, np.array([[discrete_act_hi] for i in range(1)])])
                     
                 else:
                     if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
-                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
-                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo,act_lo] for i in range(1)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi,act_hi] for i in range(1)])])
                     elif self.ACT_TYPE==ActionType.PID:
-                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo] for i in range(self.NUM_DRONES)])])
-                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi] for i in range(self.NUM_DRONES)])])
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo,act_lo,act_lo] for i in range(1)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi,act_hi,act_hi] for i in range(1)])])
                     elif self.ACT_TYPE in [ActionType.ONE_D_RPM, ActionType.ONE_D_PID]:
-                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo] for i in range(self.NUM_DRONES)])])
-                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi] for i in range(self.NUM_DRONES)])])
+                        obs_lower_bound = np.hstack([obs_lower_bound, np.array([[act_lo] for i in range(1)])])
+                        obs_upper_bound = np.hstack([obs_upper_bound, np.array([[act_hi] for i in range(1)])])
             
             ray_lo = np.tile([-1 ,0, -np.inf, -np.inf, -np.inf], self.routing[0].NUM_RAYS)
             ray_hi = np.tile([np.inf ,1, np.inf, np.inf, np.inf], self.routing[0].NUM_RAYS)
             # ++++++ Add distance-to-destination to observation space ++++++
-            obs_lower_bound = np.hstack([obs_lower_bound, np.array([[0] for i in range(self.NUM_DRONES)])])
-            obs_upper_bound = np.hstack([obs_upper_bound, np.array([[np.inf] for i in range(self.NUM_DRONES)])])
+            obs_lower_bound = np.hstack([obs_lower_bound, np.array([[0] for i in range(1)])])
+            obs_upper_bound = np.hstack([obs_upper_bound, np.array([[np.inf] for i in range(1)])])
            
             for _ in range(self.SENSOR_BUFFER_SIZE):
-                self.sensor_buffer.append(np.zeros((self.NUM_DRONES, 5*self.routing[0].NUM_RAYS))) # 5: info from rayCast
+                self.sensor_buffer.append(np.zeros((1, 5*self.routing[0].NUM_RAYS))) # 5: info from rayCast
                 #++++++ Add sensor buffer to observation space +++++++++++++
                 # For now, sensor is RayCasting -> need to generalize observation to more types of sensors
                 # Rayinfo: [obj_id,  hit_fraction,  hitPos_x,  hitPos_y,  hitPos_z] per ray
-                obs_lower_bound = np.hstack([obs_lower_bound, np.array([list(ray_lo) for _ in range(self.NUM_DRONES)])])
-                obs_upper_bound = np.hstack([obs_upper_bound, np.array([list(ray_hi) for _ in range(self.NUM_DRONES)])])
+                obs_lower_bound = np.hstack([obs_lower_bound, np.array([list(ray_lo) for _ in range(1)])])
+                obs_upper_bound = np.hstack([obs_upper_bound, np.array([list(ray_hi) for _ in range(1)])])
             ############################################################
             # added 20241015
             obs_lower_bound =  obs_lower_bound.reshape(obs_lower_bound.shape[1]*obs_lower_bound.shape[0],)
@@ -373,7 +382,7 @@ class ExtendedRLAviary(RoutingAviary):
         """
         if self.OBS_TYPE == ObservationType.RGB:
             if self.step_counter%self.IMG_CAPTURE_FREQ == 0:
-                for i in range(self.NUM_DRONES):
+                for i in range(1):
                     self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i,
                                                                                  segmentation=False
                                                                                  )
@@ -384,13 +393,13 @@ class ExtendedRLAviary(RoutingAviary):
                                           path=self.ONBOARD_IMG_PATH+"drone_"+str(i),
                                           frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
                                           )
-            return np.array([self.rgb[i] for i in range(self.NUM_DRONES)]).astype('float32')
+            return np.array([self.rgb[i] for i in range(1)]).astype('float32')
         elif self.OBS_TYPE == ObservationType.KIN:
             ############################################################
             #### OBS SPACE OF SIZE 12
-            obs_12 = np.zeros((self.NUM_DRONES,12))
-            dum = np.zeros((self.NUM_DRONES,self.routing[0].NUM_RAYS*5))
-            for i in range(self.NUM_DRONES):
+            obs_12 = np.zeros((1,12))
+            dum = np.zeros((1,self.routing[0].NUM_RAYS*5))
+            for i in range(1):
                 #obs = self._clipAndNormalizeState(self._getDroneStateVector(i))
                 obs = self._getDroneStateVector(i)
                 # (x, y, z, R, P, Y, vx, vy, vz, wx, wy,)
@@ -398,17 +407,17 @@ class ExtendedRLAviary(RoutingAviary):
                 dum[i,:] = np.array([list(self.routing[i].RAYS_INFO.reshape(5*self.routing[i].NUM_RAYS,))])
             self.sensor_buffer.append(dum) 
                 
-            ret = np.array([obs_12[i, :] for i in range(self.NUM_DRONES)]).astype('float32')
+            ret = np.array([obs_12[i, :] for i in range(1)]).astype('float32')
             #### Add action buffer to observation #######################
             for i in range(self.ACTION_BUFFER_SIZE):
-                ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
+                ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(1)])])
          
             # #++++++ Add distance-to-destination +++++++++++++++++++++++++
-            ret = np.hstack([ret, np.array([[self.routing[i].getDistanceToDestin()] for i in range(self.NUM_DRONES)])]).astype('float32')
+            ret = np.hstack([ret, np.array([[self.routing[i].getDistanceToDestin()] for i in range(1)])]).astype('float32')
           
             # #++++++ Add sensor buffer to observation  +++++++++++++++++++
             for i in range(self.SENSOR_BUFFER_SIZE):
-                ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])]).astype('float32')
+                ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(1)])]).astype('float32')
             # ret = ret.reshape(ret.shape[1], ).astype('float32')
             ret = ret.reshape(ret.shape[1]*ret.shape[0], ).astype('float32')
             return ret.astype('float32')
