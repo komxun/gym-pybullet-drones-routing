@@ -159,13 +159,13 @@ def run(
         #### Compute control for the current way point #############
         for j in range(num_drones):
             
-            if routing[j].REACH_DESTIN:
-                routing[j].reset()
-                tempDestin = routing[j].DESTINATION
-                tempHome = routing[j].HOME_POS
-                routing[j].DESTINATION = tempHome
-                routing[j].HOME_POS = tempDestin
-                routeCounter[j] = 1
+            # if routing[j].REACH_DESTIN:
+            #     routing[j].reset()
+            #     tempDestin = routing[j].DESTINATION
+            #     tempHome = routing[j].HOME_POS
+            #     routing[j].DESTINATION = tempHome
+            #     routing[j].HOME_POS = tempDestin
+            #     routeCounter[j] = 1
                 
             #------- Compute route (waypoint) to follow ----------------
             foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 

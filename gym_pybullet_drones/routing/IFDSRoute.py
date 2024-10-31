@@ -2,7 +2,7 @@ import math
 import numpy as np
 import pybullet as p
 
-from gym_pybullet_drones.routing.BaseRouting import BaseRouting, SpeedCommandFlag
+from gym_pybullet_drones.routing.BaseRouting import BaseRouting, SpeedCommandFlag, RouteStatus
 from gym_pybullet_drones.envs.BaseAviary import DroneModel
 # from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 # from gym_pybullet_drones.utils.utils import nnlsRPM
@@ -29,7 +29,7 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
-        self.RHO0_IFDS = 2.5
+        self.RHO0_IFDS = 4.5
         # self.RHO0_IFDS = 8.5
         self.SIGMA0_IFDS = 2
         self.ALPHA = 0
@@ -395,9 +395,8 @@ class IFDSRoute(BaseRouting):
                 if flagBreak:
                     break
         elif self.SIM_MODE == 2:
-            # Mode 2: Simulate by reaching distance
-            
-            if self.route_counter == 1:
+            # Mode 2: Simulate by reaching distance (for global path)
+            if self.route_counter == 1 or self.GLOBAL_PATH.size == 0:
                 # Calculate global path
                 t = 0
                 while True:
@@ -407,6 +406,7 @@ class IFDSRoute(BaseRouting):
                     t += 1
             else:
                 # Use global path
+                self.STAT[0] = RouteStatus.GLOBAL
                 flagReturn = 1
                 flagBreak = 1
                 foundPath = 2

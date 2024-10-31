@@ -1,21 +1,26 @@
 from gym_pybullet_drones.drl_custom.drl_imports import tempfile, gym, wrappers, np, base64, json, os, subprocess, io
 from gymnasium.wrappers import RecordVideo
 from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics
+from gym_pybullet_drones.routing.RouteMission import RouteMission
 def get_make_env_fn(**kargs):
     def make_env_fn(env_name, seed=None, render=None, record=False,
                     unwrapped=False, monitor_mode=None, 
-                    inner_wrappers=None, outer_wrappers=None):
+                    inner_wrappers=None, outer_wrappers=None,
+                    num_drones=1):
         
         DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
         DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
-        DEFAULT_AGENTS = 1
-        DEFAULT_MA = False
+        DEFAULT_AGENTS = num_drones
         DEFAULT_PHYSICS = Physics("pyb")
         DEFAULT_CONTROL_FREQ_HZ = 60
         DEFAULT_SIMULATION_FREQ_HZ = 60
-        INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(DEFAULT_AGENTS)])
-        INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAULT_AGENTS)])
+        DEFAULT_SCENARIO = 2
 
+        MISSION = RouteMission()
+        MISSION.generateMission(numDrones=num_drones,scenario=DEFAULT_SCENARIO)
+        INIT_XYZS = MISSION.INIT_XYZS
+        INIT_RPYS = MISSION.INIT_RPYS
+        DESTINS = MISSION.DESTINS
 
         mdir = tempfile.mkdtemp()
         env = None
@@ -29,7 +34,8 @@ def get_make_env_fn(**kargs):
                                                  ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
                                                  initial_xyzs=INIT_XYZS,
-                                                 initial_rpys=INIT_RPYS)
+                                                 initial_rpys=INIT_RPYS,
+                                                 num_drones = DEFAULT_AGENTS)
                 # env.render()
             except:
                 pass
@@ -47,7 +53,14 @@ def get_make_env_fn(**kargs):
                                                  ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
                                                  initial_xyzs=INIT_XYZS,
-                                                 initial_rpys=INIT_RPYS)
+                                                 initial_rpys=INIT_RPYS,
+                                                 num_drones= DEFAULT_AGENTS)
+        # by Komsun
+        for j in range(num_drones):
+            env.routing[j].CUR_POS = INIT_XYZS[j,:]
+            env.routing[j].HOME_POS = INIT_XYZS[j,:]
+            env.routing[j].DESTINATION = DESTINS[j,:]
+        
         # if seed is not None: env.seed(seed)
         if seed is not None:
             _, _ = env.reset(seed=seed)

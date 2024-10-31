@@ -314,7 +314,7 @@ class RoutingAviary(BaseAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        scene = 2
+        scene = 0
         if scene == 0:
             pass
 
@@ -751,8 +751,8 @@ class RoutingAviary(BaseAviary):
                 # print(f"Object #{id}: mass = {mass}")
                 pos, orn = p.getBasePositionAndOrientation(id)
                 p.applyExternalForce(id, -1, [50*sign,0,-mass*9.81], pos, flags=p.WORLD_FRAME) 
-        else:
-            print("[ERROR] in RoutingAviary, No obstacles")  
+        # else:
+            # print("[ERROR] in RoutingAviary, No obstacles")  
                 
     
     ################################################################################

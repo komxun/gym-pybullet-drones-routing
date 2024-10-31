@@ -28,21 +28,21 @@ from gym_pybullet_drones.drl_custom.value_based_DRL.DQN import DQN
 from gym_pybullet_drones.drl_custom.value_based_DRL.DuelingDDQN import DuelingDDQN
 from gym_pybullet_drones.drl_custom.replay_buffers.ReplayBuffer import ReplayBuffer
 
-DEFAULT_GUI = True
-DEFAULT_RECORD_VIDEO = False
-DEFAULT_OUTPUT_FOLDER = 'results'
-DEFAULT_COLAB = False
+# DEFAULT_GUI = True
+# DEFAULT_RECORD_VIDEO = False
+# DEFAULT_OUTPUT_FOLDER = 'results'
+# DEFAULT_COLAB = False
 
-DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
-DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
-DEFAULT_AGENTS = 1
-DEFAULT_MA = False
-DEFAULT_PHYSICS = Physics("pyb")
-DEFAULT_CONTROL_FREQ_HZ = 60
-DEFAULT_SIMULATION_FREQ_HZ = 60
+# DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
+# DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
+DEFAULT_AGENTS = 10
+# DEFAULT_MA = False
+# DEFAULT_PHYSICS = Physics("pyb")
+# DEFAULT_CONTROL_FREQ_HZ = 60
+# DEFAULT_SIMULATION_FREQ_HZ = 60
 
-INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(DEFAULT_AGENTS)])
-INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAULT_AGENTS)])
+# INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(DEFAULT_AGENTS)])
+# INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/DEFAULT_AGENTS] for i in range(DEFAULT_AGENTS)])
 
 
 # New
@@ -61,10 +61,10 @@ dueling_ddqn_agents, best_dueling_ddqn_agent_key, best_eval_score = {}, None, fl
 for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-aviary-v0',
-        'gamma': 0.995,
-        'max_minutes': 2,
+        'gamma': 0.9, # 0.995
+        'max_minutes': 5,
         'max_episodes': 10000,
-        'goal_mean_100_reward': 150  # to be determined properly
+        'goal_mean_100_reward': 3000  # 150 to be determined properly
     }
     
     # value_model_fn = lambda nS, nA: FCQ(nS, nA, hidden_dims=(512,128))
@@ -99,7 +99,7 @@ for seed in SEEDS:
                         update_target_every_steps,
                         tau)
 
-    make_env_fn, make_env_kargs = get_make_env_fn(env_name=env_name)
+    make_env_fn, make_env_kargs = get_make_env_fn(env_name=env_name, num_drones=DEFAULT_AGENTS)
     result, final_eval_score, training_time, wallclock_time = agent.train(
         make_env_fn, make_env_kargs, seed, gamma, max_minutes, max_episodes, goal_mean_100_reward)
     dueling_ddqn_results.append(result)

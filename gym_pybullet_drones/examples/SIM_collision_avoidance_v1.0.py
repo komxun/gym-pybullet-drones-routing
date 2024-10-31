@@ -37,7 +37,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 20
+DEFAULT_NUM_DRONES = 5
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
@@ -157,7 +157,7 @@ def run(
             # else:
             #     routing[j]._setCommand(SpeedCommandFlag, "constant",0.1)
             routing[j]._setCommand(SpeedCommandFlag, "constant",0.5)
-            routing[j]._setCommand(RouteCommandFlag, "follow_local_7")
+            routing[j]._setCommand(RouteCommandFlag, "follow_local",3)
             
             
             action[j, :], _, _ = ctrl[j].computeControlFromState(control_timestep=env.CTRL_TIMESTEP,

@@ -134,7 +134,7 @@ class ExtendedRLAviary(RoutingAviary):
             action_size = 1
             for _ in range(self.ACTION_BUFFER_SIZE):
                 self.action_buffer.append(np.zeros((self.NUM_DRONES,action_size)))
-            return spaces.Discrete(11)  # 5 discrete actions, details in _preprocessAction()
+            return spaces.Discrete(11, start = 0) # 5 discrete actions, details in _preprocessAction()
         else:
             if self.ACT_TYPE in [ActionType.RPM, ActionType.VEL]:
                 size = 4
@@ -148,9 +148,9 @@ class ExtendedRLAviary(RoutingAviary):
             act_lower_bound = np.array([-1*np.ones(size) for i in range(self.NUM_DRONES)])
             act_upper_bound = np.array([+1*np.ones(size) for i in range(self.NUM_DRONES)])
             #
-            for i in range(self.ACTION_BUFFER_SIZE):
-                self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
-            #
+            # for i in range(self.ACTION_BUFFER_SIZE):
+            #     self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
+            self.action_buffer.append(np.zeros((self.NUM_DRONES,size)))
             return spaces.Box(low=act_lower_bound, high=act_upper_bound, dtype=np.float32)
 
     ################################################################################
@@ -180,6 +180,7 @@ class ExtendedRLAviary(RoutingAviary):
         # p.removeAllUserDebugItems()
         self.action_buffer.append(np.array([[float(action)]])) # Need to revise this to have N-number of drones
                                                         # (similar to [[discrete_act_lo] for i in range(self.NUM_DRONES)])])
+                                                        
         rpm = np.zeros((self.NUM_DRONES,4))
         for k in range(self.NUM_DRONES):  # k: num drone
             # Process action based on ACT_TYPE
@@ -193,8 +194,8 @@ class ExtendedRLAviary(RoutingAviary):
                 #------- Compute route (waypoint) to follow ----------------
                 foundPath, path = self.routing[k].computeRouteFromState(route_timestep=self.routing[k].route_counter, 
                                                                     state = state, 
-                                                                    home_pos = self.HOME_POS, 
-                                                                    target_pos = self.DESTIN,
+                                                                    home_pos = self.routing[k].HOME_POS,   # self.HOME_POS
+                                                                    target_pos = self.routing[k].DESTINATION,   # self.DESTIN
                                                                     speed_limit = self.SPEED_LIMIT,
                                                                     obstacle_data = self.OBSTACLE_DATA,
                                                                     drone_ids = self.DRONE_IDS
@@ -233,31 +234,31 @@ class ExtendedRLAviary(RoutingAviary):
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
                 elif action ==3:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
                 elif action==4:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_1")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 1)
                 elif action==5:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_2")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 2)
                 elif action==6:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_3")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 3)
                 elif action==7:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_4")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 4)
                 elif action==8:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_5")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 5)
                 elif action==9:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_6")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 6)
                 elif action==10:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_7")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 7)
                 elif action==11:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local_8")
+                    self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 8)
                 
 
                 
@@ -406,7 +407,8 @@ class ExtendedRLAviary(RoutingAviary):
             # #++++++ Add sensor buffer to observation  +++++++++++++++++++
             for i in range(self.SENSOR_BUFFER_SIZE):
                 ret = np.hstack([ret, np.array([self.sensor_buffer[i][j, :] for j in range(self.NUM_DRONES)])]).astype('float32')
-            ret = ret.reshape(ret.shape[1], ).astype('float32')
+            # ret = ret.reshape(ret.shape[1], ).astype('float32')
+            ret = ret.reshape(ret.shape[1]*ret.shape[0], ).astype('float32')
             return ret.astype('float32')
             ############################################################
         else:
