@@ -52,8 +52,7 @@ DEFAULT_COLAB = False
 DEFAULT_NUM_DRONES = 20
 DEFAULT_SCENARIO = 2
 
-MISSION = RouteMission()
-MISSION.generateMission(numDrones=DEFAULT_NUM_DRONES,scenario=DEFAULT_SCENARIO)
+
 
 
 def run(
@@ -72,9 +71,13 @@ def run(
         colab=DEFAULT_COLAB
         ):
     #### Initialize the simulation #############################
+    MISSION = RouteMission()
+    # MISSION.generateMission(numDrones=DEFAULT_NUM_DRONES,scenario=DEFAULT_SCENARIO)
+    MISSION.generateRandomMission(maxNumDrone=DEFAULT_NUM_DRONES, minNumDrone=DEFAULT_NUM_DRONES, seed=34)
     INIT_XYZS = MISSION.INIT_XYZS
     INIT_RPYS = MISSION.INIT_RPYS
     DESTINS = MISSION.DESTINS
+    num_drones = MISSION.NUM_DRONES
     #### Create the environment ################################
     
     env = RoutingAviary(drone_model=drone,
@@ -175,11 +178,11 @@ def run(
             
             # p.resetDebugVisualizerCamera(cameraDistance=5, cameraYaw=0, cameraPitch=-92, cameraTargetPosition=routing[0].CUR_POS)
             # p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=obs[0][5], cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-            # if camSwitch>0:
-            #     p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
-            # else:
-            #     # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-            #     p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=0, cameraPitch=-91, cameraTargetPosition=routing[0].CUR_POS)
+            if camSwitch>0:
+                p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
+            else:
+                p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
+            # p.resetDebugVisualizerCamera(cameraDistance=2.5, cameraYaw=0, cameraPitch=-89, cameraTargetPosition=routing[0].CUR_POS)
         #### Log the simulation ####################################
         # for j in range(num_drones):
         #     logger.log(drone=j,

@@ -81,7 +81,8 @@ class PER():
         self.seed = seed
         self.gamma = gamma
         
-        env = self.make_env_fn(**self.make_env_kargs, seed=self.seed)
+        # env = self.make_env_fn(**self.make_env_kargs, seed=self.seed)
+        env = self.make_env_fn(**self.make_env_kargs)
         torch.manual_seed(self.seed) ; np.random.seed(self.seed) ; random.seed(self.seed)
     
         nS, nA = env.observation_space.shape[0], env.action_space.n
@@ -109,6 +110,10 @@ class PER():
         result[:] = np.nan
         training_time = 0
         for episode in range(1, max_episodes + 1):
+
+            #-----Added by Komsun -----
+            # env = self.make_env_fn(**self.make_env_kargs, seed=self.seed)
+            #-----------------------
             episode_start = time.time()
             
             state, _ = env.reset(seed = self.seed)
@@ -189,12 +194,13 @@ class PER():
                 break
                 
         final_eval_score, score_std = self.evaluate(self.online_model, env, n_episodes=100)
+        # final_eval_score, score_std = self.evaluate(self.online_model, env, n_episodes=1) # Komsun
         wallclock_time = time.time() - training_start
         print('Training complete.')
         print('Final evaluation score {:.2f}\u00B1{:.2f} in {:.2f}s training time,'
               ' {:.2f}s wall-clock time.\n'.format(
                   final_eval_score, score_std, training_time, wallclock_time))
-        env.close() ; del env
+        # env.close() ; del env
         self.get_cleaned_checkpoints()
         return result, final_eval_score, training_time, wallclock_time
     

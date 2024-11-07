@@ -1,4 +1,5 @@
 import numpy as np
+import random
 class RouteMission:
     
     def __init__(self, numDrones=1, scenario=1, timeLimit=None):
@@ -11,7 +12,7 @@ class RouteMission:
         self.WAYPOINTS = []
         
 
-    def generateMission(self, numDrones=1, scenario=1, timeLimit=None, seed=None):
+    def generateMission(self, numDrones=1, scenario=1, timeLimit=None):
         self.NUM_DRONES = numDrones
         self.SCENE = scenario
         self.TIME_LIMIT = timeLimit
@@ -21,8 +22,95 @@ class RouteMission:
             self._multiAgentMission(scenario, numDrones)
         else:
             raise ValueError("[Error] in RouteMission: Invalid number of drones")
+        
+    def generateRandomMission(self, maxNumDrone, minNumDrone=1, seed=None):
+        # Function input validation
+        if not isinstance(minNumDrone, int) or not isinstance(maxNumDrone, int):
+            raise TypeError("[Error] in generateRandomMission: Both minNumDrone and maxNumDrone must be integers.")
+        if minNumDrone < 0 or maxNumDrone < 0:
+            raise ValueError("[Error] in generateRandomMission:Both minNumDrone and maxNumDrone must be non-negative.")
+        if minNumDrone > maxNumDrone:
+            raise ValueError("[Error] in generateRandomMission: minNumDrone cannot be greater than maxNumDrone.")
+        if seed is not None and not isinstance(seed, int):
+            raise TypeError("[Error] in generateRandomMission:Seed must be an integer or None.")
+        
+        # Generate a random number of drones between minNumDrone and maxNumDrone
+        num_drones = random.randint(minNumDrone, maxNumDrone)
+        self.NUM_DRONES = num_drones
+
+        # Set the random seed for reproducibility if provided
+        if seed:
+            print(f"\nRANDOM MISSION IS GENERATE WITH SEED = {seed}\n")
+            random.seed(seed)
+        else:
+            print(f"\n[RouteMission]: Generating random scenario with {self.NUM_DRONES} drones.\n")
+
+        # Define constants
+        ORIGIN = [0, 9, 1]     # Reference point for positioning
+        BASE_R = 4             # Base radius for initial position
+        BASE_R_D = 2          # Base radius for destination position
+        H_STEP = 0           # Base vertical step increment for each drone
+        RADIUS_VARIATION = 1 # Max random variation for radius
+        # RADIUS_VARIATION = 0.2
+        # ANGLE_VARIATION = 0.2  # Max random variation for angle (in radians)
+        ANGLE_VARIATION = 90 * np.pi/180
+        Z_VARIATION = 0.2  #0.3     # Max random variation for initial z-axis
+        # Z_VARIATION = 0.1
+
+        # Initialize arrays
+        INIT_XYZS = np.zeros((num_drones, 3))
+        INIT_RPYS = np.zeros((num_drones, 3))
+        DESTINS = np.zeros((num_drones, 3))
+        WAYPOINTS = []
+
+        # Set the first drone's position, orientation, and destination explicitly
+        INIT_XYZS[0] = [0, -0.7, ORIGIN[2]]
+        INIT_RPYS[0] = [0, 0, 0]
+        DESTINS[0] = [0, 11, 1]
+        WAYPOINTS.append(np.vstack((INIT_XYZS[0], DESTINS[0])))
+
+        # Position remaining drones in circular paths with added randomness
+        for i in range(1, num_drones):
+            # Random radius and angle variations for initial positions
+            random_radius = BASE_R + random.uniform(-RADIUS_VARIATION, RADIUS_VARIATION)
+            random_angle_init = (i / num_drones) * 2 * np.pi + np.pi / 2 + random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
+            
+            # Initial position with random radius and angle
+            INIT_XYZS[i] = [
+                ORIGIN[0] + random_radius * np.cos(random_angle_init),
+                ORIGIN[1] + random_radius * np.sin(random_angle_init) - BASE_R,
+                ORIGIN[2] + i * H_STEP + random.uniform(-Z_VARIATION, Z_VARIATION)
+            ]
+
+            # Orientation (roll, pitch fixed, random yaw)
+            INIT_RPYS[i] = [0, 0, random.uniform(0, 2 * np.pi)]
+
+            # Random radius and angle variations for destination positions
+            random_radius_dest = BASE_R_D + random.uniform(-RADIUS_VARIATION, RADIUS_VARIATION)
+            random_angle_dest = random_angle_init + np.pi / 2 + random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
+            
+            # Destination position with random radius and angle
+            DESTINS[i] = [
+                ORIGIN[0] + random_radius_dest * np.cos(random_angle_dest),
+                ORIGIN[1] + random_radius_dest * np.sin(random_angle_dest) - BASE_R_D,
+                ORIGIN[2] + i * H_STEP + random.uniform(-Z_VARIATION, Z_VARIATION)
+                # ORIGIN[2]  # Keep z-level consistent for destinations
+            ]
+
+            WAYPOINTS.append(np.vstack((INIT_XYZS[i], DESTINS[i])))
+
+        self.NUM_DRONES = num_drones
+        self.INIT_XYZS = INIT_XYZS
+        self.INIT_RPYS = INIT_RPYS
+        self.DESTINS   = DESTINS
+        self.WAYPOINTS = WAYPOINTS
 
     def _singleAgentMission(self, scenario):
+        if not isinstance(scenario, int):
+            raise TypeError("[Error] in _singleAgentMission: scenario number must be positive integer.")
+        if scenario <0:
+            raise ValueError("[Error] in _singleAgentMission: scenario number must be non-negative.")
+        
         if scenario == 1:
             """Simple straight line"""
             INIT_XYZS = np.array([0, 0, 0.5]).reshape(1,3)
@@ -50,8 +138,8 @@ class RouteMission:
         elif scenario == 2:
             """Random straight lines in an oval"""
             H_STEP = 0.1
-            R = 2  # 2
-            R_D = 4
+            R = 1  # 2
+            R_D = 1  #2
             ORIGIN = [0,4,1]
             # Initialize empty arrays
             INIT_XYZS = np.zeros((num_drones, 3))

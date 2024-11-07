@@ -24,7 +24,7 @@ DEFAULT_COLAB = False
 
 DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
 DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
-DEFAULT_AGENTS = 1
+DEFAULT_AGENTS = 20
 DEFAULT_MA = False
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_CONTROL_FREQ_HZ = 60
@@ -41,19 +41,27 @@ EPS = 1e-6
 BEEP = lambda: os.system("printf '\a'")
 RESULTS_DIR = os.path.join('..', 'results')
 # SEEDS = (12, 34, 56, 78, 90)
-SEEDS = (12,)
+SEEDS = (12, 34, 69)
+# SEEDS = tuple(range(10))
 
 per_results = []
 best_agent, best_eval_score = None, float('-inf')
 for seed in SEEDS:
+    print(f"seed = {seed}")
+    # environment_settings = {
+    #     'env_name': 'autorouting-aviary-v0',
+    #     'gamma': 0.995,  #before 0.95
+    #     'max_minutes': 10,
+    #     'max_episodes': 10000,
+    #     'goal_mean_100_reward': 110  # to be determined properly
+    # }
     environment_settings = {
-        'env_name': 'autorouting-aviary-v0',
-        'gamma': 0.995,  #before 0.95
+        'env_name': 'autorouting-sa-aviary-v0',
+        'gamma': 0.95,  #before 0.95
         'max_minutes': 10,
-        'max_episodes': 10000,
-        'goal_mean_100_reward': 110  # to be determined properly
+        'max_episodes': 20,
+        'goal_mean_100_reward': 3000  # to be determined properly
     }
-
     value_model_fn = lambda nS, nA: FCDuelingQ(nS, nA, hidden_dims=(512,128))
     value_optimizer_fn = lambda net, lr: optim.RMSprop(net.parameters(), lr=lr)
     value_optimizer_lr = 0.0005
@@ -88,7 +96,7 @@ for seed in SEEDS:
                 update_target_every_steps,
                 tau)
 
-    make_env_fn, make_env_kargs = get_make_env_fn(env_name=env_name)
+    make_env_fn, make_env_kargs = get_make_env_fn(env_name=env_name, num_drones=DEFAULT_AGENTS, seed=seed)
     result, final_eval_score, training_time, wallclock_time = agent.train(
         make_env_fn, make_env_kargs, seed, gamma, max_minutes, max_episodes, goal_mean_100_reward)
     per_results.append(result)

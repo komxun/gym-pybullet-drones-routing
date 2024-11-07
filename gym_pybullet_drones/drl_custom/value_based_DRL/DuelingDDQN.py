@@ -1,4 +1,5 @@
 from gym_pybullet_drones.drl_custom.drl_imports import *
+from gym_pybullet_drones.drl_custom.utils import get_make_env_fn
 LEAVE_PRINT_EVERY_N_SECS = 60
 ERASE_LINE = '\x1b[2K'
 class DuelingDDQN():
@@ -70,6 +71,9 @@ class DuelingDDQN():
         training_start, last_debug_time = time.time(), float('-inf')
 
         self.checkpoint_dir = tempfile.mkdtemp()
+        #by Komsun 
+        # make_env_fn, make_env_kargs = get_make_env_fn(env_name='autorouting-sa-aviary-v0', num_drones=20)
+        #----
         self.make_env_fn = make_env_fn
         self.make_env_kargs = make_env_kargs
         self.seed = seed

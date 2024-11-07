@@ -31,12 +31,14 @@ from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
+from gym_pybullet_drones.control.CTBRControl import CTBRControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag, SpeedStatus
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
+# DEFAULT_DRONES = DroneModel("racer")
 DEFAULT_NUM_DRONES = 5
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
@@ -116,6 +118,7 @@ def run(
     #### Initialize the controllers ############################
     if drone in [DroneModel.CF2X, DroneModel.CF2P]:
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
+
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
     routing = [IFDSRoute(drone_model=drone, drone_id = i) for i in range(num_drones)]

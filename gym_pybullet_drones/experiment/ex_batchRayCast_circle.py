@@ -2,6 +2,7 @@ import pybullet as p
 import time
 import math
 import pybullet_data
+import pkg_resources
 
 useGui = True
 
@@ -10,13 +11,13 @@ if (useGui):
 else:
   p.connect(p.DIRECT)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
-p.setGravity(0,0,-9.81)
+# p.setGravity(0,0,-9.81)
 
 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+p.configureDebugVisualizer(rgbBackground=[1, 1, 1])
 #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,0)
-
-p.loadURDF("plane.urdf")
-p.loadURDF("r2d2.urdf", [3, 3, 1])
+# p.loadURDF("plane.urdf")
+p.loadURDF("sphere2.urdf", [1.5, 1.5, 0.5])
 # p.loadURDF("bicycle/bike.urdf", [5, 0, 1])
 # p.loadURDF("teddy_large.urdf", [5, 0, 1])
 p.setRealTimeSimulation(1) 
@@ -25,12 +26,11 @@ rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 20
-
-rayLen = 5
+numRays = 200
+rayLen = 3
 
 rayHitColor = [1, 0, 0]
-rayMissColor = [0, 1, 0]
+rayMissColor = [0, 0, 0.5]
 
 replaceLines = True
 
@@ -70,10 +70,10 @@ for i in range(numSteps):
 
       if (hitObjectUid < 0):
         hitPosition = [0, 0, 0]
-        p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i])
+        p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lineWidth=2)
       else:
         hitPosition = results[i][3]
-        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
+        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lineWidth=2)
 
   #time.sleep(1./240.)
 

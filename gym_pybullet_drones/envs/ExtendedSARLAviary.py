@@ -11,6 +11,7 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
+from gym_pybullet_drones.routing.RouteMission import RouteMission
 
 class ExtendedSARLAviary(RoutingAviary):
     """Base single and multi-agent environment class for reinforcement learning."""
@@ -73,6 +74,10 @@ class ExtendedSARLAviary(RoutingAviary):
         self.HOME_POS = homePos
         self.DESTIN = destin
         num_drones_total = num_drones 
+
+        self.MISSION = RouteMission()
+        self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
+        
         # =============================================================================
 
         #### Create a buffer for the last .5 sec of actions ########
@@ -93,6 +98,10 @@ class ExtendedSARLAviary(RoutingAviary):
                 self.routing = [IFDSRoute(drone_model=DroneModel.CF2X, drone_id=i) for i in range(num_drones_total)]
                 
                 for j in range(len(self.routing)):
+                    # self.routing[j].HOME_POS = self.MISSION.INIT_XYZS[j,:]
+                    # self.routing[j].DESTINATION = self.MISSION.DESTINS[j,:]
+                    # self.routing[j].CUR_POS = self.MISSION.INIT_XYZS[j, :]
+                    # self.routing[j].CUR_RPY = self.MISSION.INIT_RPYS[j,:]
                     self.routing[j].HOME_POS = homePos
                     self.routing[j].DESTINATION = np.array([destin[0], destin[1], destin[2]+j])
             else:
@@ -122,7 +131,7 @@ class ExtendedSARLAviary(RoutingAviary):
             self.SPEED_LIMIT = 0.03 * self.MAX_SPEED_KMH * (1000/3600)
 
     ################################################################################
-
+    
     def _actionSpace(self):
         """Returns the action space of the environment.
 
@@ -190,6 +199,8 @@ class ExtendedSARLAviary(RoutingAviary):
                 state = self._getDroneStateVector(k)
 
                 
+
+                
                 #------- Compute route (waypoint) to follow ----------------
                 foundPath, path = self.routing[k].computeRouteFromState(route_timestep=self.routing[k].route_counter, 
                                                                     state = state, 
@@ -199,18 +210,42 @@ class ExtendedSARLAviary(RoutingAviary):
                                                                     obstacle_data = self.OBSTACLE_DATA,
                                                                     drone_ids = self.DRONE_IDS
                                                                     )
-                
+                # ==== PASSIVE BEHAVIOUR ======
                 if self.routing[k].route_counter == 1:
                     if foundPath>0:
-                        print("Calculating Global Route . . .")
+                        # print("Calculating Global Route . . .")
                         self.routing[k].setGlobalRoute(path)
                     else:
-                        raise ValueError("[Error] Global route was not found. Mission aborted.")        
-
-                # ==== PASSIVE BEHAVIOUR ======
+                        fromPos = self.routing[k].HOME_POS
+                        toPos = self.routing[k].DESTINATION
+                        n_wp = 100
+                        gpath = self.routing[k]._generateWaypoints(fromPos, toPos, n_wp)
+                        self.routing[k].setGlobalRoute(np.array(gpath).reshape((3,n_wp)))
+                        # raise ValueError("[Error] Global route was not found. Mission aborted.")    
+                # if self.routing[k].route_counter == 1:
+                #     fromPos = self.routing[k].HOME_POS
+                #     toPos = self.routing[k].DESTINATION
+                #     n_wp = 100
+                #     # print("Calculating Global path again")
+                #     gpath = self.routing[k]._generateWaypoints(fromPos, toPos, n_wp)
+                #     self.routing[k].setGlobalRoute(np.array(gpath).reshape((3,n_wp)))
+                #     # self.routing[k]._updateTargetPosAndVel(gpath, self.routing[k].route_counter, self.SPEED_LIMIT)
+                #     # raise ValueError("[Error] Global route was not found. Mission aborted.")  
                 if k != 0:
+                    # Looping Home<->Destination
+                    if self.routing[k].REACH_DESTIN:
+                        self.routing[k].reset()
+                        tempDestin = self.routing[k].DESTINATION
+                        tempHome = self.routing[k].HOME_POS
+                        self.routing[k].DESTINATION = tempHome
+                        self.routing[k].HOME_POS = tempDestin
+                        self.routing[k].route_counter = 0
+
+
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
+
+                
                 # ======= 3 Actions ==================================================
                 # self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
                 # if action ==0:
@@ -235,7 +270,7 @@ class ExtendedSARLAviary(RoutingAviary):
                 # elif action==4:
                 #     self.routing[k0]._setCommand(SpeedCommandFlag, "hover")
 
-                # ======= 11 Actions ==================================================
+                # ======= 12 Actions ==================================================
 
                 if action ==0:
                     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 0.05)
@@ -289,10 +324,11 @@ class ExtendedSARLAviary(RoutingAviary):
                     raise ValueError(f"Invalid action: {action}")
                 
                 #### Compute control for the current way point #############
+                
                 rpm_k, _, _ = self.ctrl[k].computeControlFromState(control_timestep=self.CTRL_TIMESTEP,
                                                                 state=state,
                                                                 target_pos = self.routing[k].TARGET_POS, 
-                                                                target_rpy = self.INIT_RPYS[k, :],
+                                                                target_rpy = self.routing[k].CUR_RPY,
                                                                 target_vel = self.routing[k].TARGET_VEL
                                                                 )
                 rpm[k,:] = rpm_k
@@ -400,8 +436,9 @@ class ExtendedSARLAviary(RoutingAviary):
             obs_12 = np.zeros((1,12))
             dum = np.zeros((1,self.routing[0].NUM_RAYS*5))
             for i in range(1):
-                #obs = self._clipAndNormalizeState(self._getDroneStateVector(i))
+                # obs = self._clipAndNormalizeState(self._getDroneStateVector(i))
                 obs = self._getDroneStateVector(i)
+                self.routing[0]._batchRayCast(self.routing[0].DRONE_ID)
                 # (x, y, z, R, P, Y, vx, vy, vz, wx, wy,)
                 obs_12[i, :] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16]]).reshape(12,)
                 dum[i,:] = np.array([list(self.routing[i].RAYS_INFO.reshape(5*self.routing[i].NUM_RAYS,))])
@@ -424,3 +461,53 @@ class ExtendedSARLAviary(RoutingAviary):
             ############################################################
         else:
             print("[ERROR] in ExtendedRLAviary._computeObs()")
+
+    def reset(self,
+              seed : int = None,
+              options : dict = None):
+        """Resets the environment.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed.
+        options : dict[..], optional
+            Additinonal options, unused
+
+        Returns
+        -------
+        ndarray | dict[..]
+            The initial observation, check the specific implementation of `_computeObs()`
+            in each subclass for its format.
+        dict[..]
+            Additional information as a dictionary, check the specific implementation of `_computeInfo()`
+            in each subclass for its format.
+
+        """
+        self.MISSION.generateRandomMission(maxNumDrone=self.NUM_DRONES, minNumDrone=self.NUM_DRONES)
+        # TODO : initialize random number generator with seed
+        p.resetSimulation(physicsClientId=self.CLIENT)
+
+        
+
+        #### Housekeeping ##########################################
+        self._housekeeping()
+        #### Update and store the drones kinematic information #####
+        self._updateAndStoreKinematicInformation()
+        for j in range(self.NUM_DRONES):
+            self.routing[j].reset()
+            self.routing[j].CUR_POS = self.MISSION.INIT_XYZS[j,:]
+            self.routing[j].CUR_RPY = self.MISSION.INIT_RPYS[j,:]
+            self.routing[j].HOME_POS = self.MISSION.INIT_XYZS[j,:]
+            # self.routing[j].GLOBAL_PATH = np.array([])
+            self.routing[j].DESTINATION = self.MISSION.DESTINS[j,:]
+        self.OBSTACLE_DATA = {}
+        self._getObstaclesData()
+        p.performCollisionDetection(physicsClientId=self.CLIENT)
+        self._detectCollision()
+        #### Start video recording #################################
+        self._startVideoRecording()
+        #### Return the initial observation ########################
+        initial_obs = self._computeObs()
+        initial_info = self._computeInfo()
+        return initial_obs, initial_info

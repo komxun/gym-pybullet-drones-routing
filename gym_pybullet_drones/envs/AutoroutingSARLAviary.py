@@ -86,7 +86,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.5  #0.2
-        reward_choice = 10  # 4:best  8: best
+        reward_choice = 12  # 4:best  8: best  10: 2nd best 11: Good
         # prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
         # d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
         # h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
@@ -112,7 +112,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
         elif reward_choice == 9:
-            """Encourage keeping distance > 10% of ray (0.15 m) away from obstacles"""
+            """Encourage keeping distance > 10% of ray away from obstacles"""
             step_cost = (prevd2destin - d2destin) * (1/d2destin)
             collide_reward = -10 + step_cost
             destin_reward = 100*(1/d2destin)
@@ -130,7 +130,6 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
             """Same as reward8, but discourage the use of local path"""
             step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
             collide_reward = -10 + step_reward
-            # destin_reward = 100*(1/d2destin)
             destin_reward = 100*h2destin
 
             if np.linalg.norm(self.routing[0].DESTINATION-state[0:3]) < reachThreshold_m:
@@ -141,17 +140,84 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                 ret = collide_reward
                 # print(f"\n***Collided*** ret = {ret}\n")
             else:
-                # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
-                if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+                # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
                     
                     # ret = step_reward/2
-                    # ret = step_reward/4
-                    ret = 0
+                    ret = step_reward/4
+                    # ret = 0
+                    # ret = -0.1
                     # print(f"ALERT: using local route, ret = {ret}\n")
                 else:
-                    
                     ret = step_reward
-                    # print(f"\nUse Global Route ret = {ret}\n")
+
+        elif reward_choice == 11:
+            """Same as reward10, but penalize getting too close to other agent"""
+            step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
+            collide_reward = -10 + step_reward
+            too_close_reward = -4  #-2 
+            destin_reward = 100*h2destin
+
+            ret = step_reward
+            if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+            # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                
+                # ret = step_reward/2
+                ret = step_reward/4
+                # ret = 0
+                # ret = -0.1
+                # print(f"ALERT: using local route, ret = {ret}\n")
+
+            if np.linalg.norm(self.routing[0].DESTINATION-state[0:3]) < reachThreshold_m:
+                ret = destin_reward
+                print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
+
+            elif int(self.CONTACT_FLAGS[0]) == 1:
+                ret = collide_reward
+                print(f"\n***Collided*** ret = {ret}\n")
+            
+            elif any(self.routing[0].RAYS_INFO[:,1]<0.2):
+                ret = too_close_reward
+
+        elif reward_choice == 12:
+            """Same as reward11, but tweak collide reward"""
+            step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
+            collide_reward = -10 + step_reward
+            too_close_reward = -1  #-2 
+            # Apply a scaling factor and decay constant for the too-close penalty
+            decay_constant = 1  # Adjust this constant to control the exponential steepness
+            destin_reward = 100*h2destin
+
+            ret = step_reward
+            if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+            # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                
+                # ret = step_reward/2
+                ret = step_reward/4
+                # ret = 0
+                # ret = -0.1
+                # print(f"ALERT: using local route, ret = {ret}\n")
+
+            if np.linalg.norm(self.routing[0].DESTINATION-state[0:3]) < reachThreshold_m:
+                ret = destin_reward
+                print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
+
+            elif int(self.CONTACT_FLAGS[0]) == 1:
+                ret = collide_reward
+                print(f"\n***Collided*** ret = {ret}\n")
+            
+            else:
+                for i in range(self.routing[0].NUM_RAYS):
+                    if self.routing[0].RAYS_INFO[i,1] < 0.2: 
+                        detected_distance = self.routing[0].RAYS_INFO[i,1] * self.routing[0].RAY_LEN_M
+                        ret += too_close_reward 
+                        # Calculate an exponential penalty based on proximity
+                        # penalty = too_close_reward * np.exp(-decay_constant * detected_distance)
+                        # ret += penalty
+
+                # print(f"\nThat's too close!! ret = {ret}\n")
+            # elif any(self.routing[0].RAYS_INFO[:,1]<0.2):
+            #     ret = too_close_reward
 
 
         return ret

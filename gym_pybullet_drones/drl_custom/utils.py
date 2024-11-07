@@ -17,11 +17,13 @@ def get_make_env_fn(**kargs):
         DEFAULT_SCENARIO = 2
 
         MISSION = RouteMission()
-        MISSION.generateMission(numDrones=num_drones,scenario=DEFAULT_SCENARIO)
+        # MISSION.generateMission(numDrones=num_drones,scenario=DEFAULT_SCENARIO)
+        MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
+        # MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones, seed = seed)
         INIT_XYZS = MISSION.INIT_XYZS
         INIT_RPYS = MISSION.INIT_RPYS
         DESTINS = MISSION.DESTINS
-
+        print(f"NUM_DRONES = {MISSION.NUM_DRONES}")
         mdir = tempfile.mkdtemp()
         env = None
         if render:
@@ -35,7 +37,7 @@ def get_make_env_fn(**kargs):
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
                                                  initial_xyzs=INIT_XYZS,
                                                  initial_rpys=INIT_RPYS,
-                                                 num_drones = DEFAULT_AGENTS)
+                                                 num_drones = MISSION.NUM_DRONES)
                 # env.render()
             except:
                 pass
@@ -54,9 +56,9 @@ def get_make_env_fn(**kargs):
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
                                                  initial_xyzs=INIT_XYZS,
                                                  initial_rpys=INIT_RPYS,
-                                                 num_drones= DEFAULT_AGENTS)
+                                                 num_drones= MISSION.NUM_DRONES)
         # by Komsun
-        for j in range(num_drones):
+        for j in range(MISSION.NUM_DRONES):
             env.routing[j].CUR_POS = INIT_XYZS[j,:]
             env.routing[j].HOME_POS = INIT_XYZS[j,:]
             env.routing[j].DESTINATION = DESTINS[j,:]

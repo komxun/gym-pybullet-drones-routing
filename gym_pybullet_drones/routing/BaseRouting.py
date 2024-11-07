@@ -85,6 +85,7 @@ class BaseRouting(object):
         """ndarray (3,N) : The global static route of UAV from starting to destination"""
         self.CUR_POS = np.array([0,0,0])
         self.CUR_VEL = np.array([0,0,0])
+        self.CUR_RPY = np.array([0,0,0])
         self.DESTINATION = np.array([0,0,0])
         self.TARGET_POS   = np.array([])   # Check-> initialize with empty array should work
         self.TARGET_VEL  =  np.array([0,0,0])
@@ -99,9 +100,11 @@ class BaseRouting(object):
         self.DETECTED_OBS_IDS = []
         self.DETECTED_OBS_DATA = {}
 
-        self.NUM_RAYS = 24
+        # self.NUM_RAYS = 24
+        self.NUM_RAYS = 200
         self.RAY_LEN_M = 1.5
-        self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
+        # self.RAY_LEN_M = 5
+        # self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
         
         
     
@@ -116,6 +119,7 @@ class BaseRouting(object):
         A general use counter is set to zero.
 
         """
+        self.GLOBAL_PATH = np.array([])
         self.route_counter = 0
 
     ################################################################################
@@ -155,6 +159,7 @@ class BaseRouting(object):
         return self.computeRoute(route_timestep=route_timestep,
                                    cur_pos=state[0:3],
                                    cur_quat=state[3:7],
+                                   cur_rpy_rad=state[7:10],
                                    cur_vel=state[10:13],
                                    cur_ang_vel=state[13:16],
                                    home_pos = home_pos,
@@ -170,6 +175,7 @@ class BaseRouting(object):
                      route_timestep,
                      cur_pos,
                      cur_quat,
+                     cur_rpy_rad,
                      cur_vel,
                      cur_ang_vel,
                      home_pos,
@@ -211,12 +217,16 @@ class BaseRouting(object):
     ################################################################################
 
     def _plotRoute(self, path):
-        pathColor = [0, 0, 1]
-        if self.DRONE_ID ==0:
-            p.removeAllUserDebugItems()
-        for i in range(0, path.shape[1]-1, 1):
-            # p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5)
+        if self.DRONE_ID==0:
+            pathColor = [0, 0, 1]
+        else:
+            pathColor = [0.5,0.5,0.6]
+        # if self.DRONE_ID ==0:
+        #     p.removeAllUserDebugItems()
+        stepper = 1  # 1
+        for i in range(0, path.shape[1]-stepper, stepper):
+            p.addUserDebugLine(path[:,i], path[:,i+stepper], pathColor, lineWidth=5, lifeTime=0.05)
+            # p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
@@ -418,14 +428,15 @@ class BaseRouting(object):
             (3,N)-shaped array of floats containing the global route
         """
         self.GLOBAL_PATH = route
-        print("Setting a global route")
+        # print("Setting a global route")
     
     ################################################################################
     
     def _updateCurPos(self, pos):
         self.CUR_POS = pos
         # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-30, cameraTargetPosition=pos)
-        
+    def _updateCurRpy(self, rpy):
+        self.CUR_RPY = rpy    
     def _updateCurVel(self, vel):
         self.CUR_VEL = vel
         
@@ -449,7 +460,8 @@ class BaseRouting(object):
         numRays = self.NUM_RAYS
         rayLen = self.RAY_LEN_M
         # rayLen = 4
-        rayHitColor = [1, 0, 0]
+        rayHitColor = [0, 1, 0]
+        
         rayMissColor = [0, 1, 0]
 
         replaceLines = False
@@ -483,9 +495,11 @@ class BaseRouting(object):
                 # This case, no detection of other fellow UAVs
                 detectOtherUAV = 1
                 if detectOtherUAV:
-                    hitCondition = hitObjectUid!=0 
+                    # hitCondition = hitObjectUid!=0 # ignore the floor
+                    hitCondition = hitObjectUid!=0  and hitObjectUid != self.DRONE_ID+1
                 else:
-                    hitCondition = hitObjectUid!=0 and hitObjectUid not in drone_ids
+                    # hitCondition = hitObjectUid!=0 and hitObjectUid not in drone_ids
+                    hitCondition = hitObjectUid not in drone_ids
 
                 if hitCondition:
                 # if hitObjectUid!=0:
@@ -493,8 +507,11 @@ class BaseRouting(object):
                     hitPosition = results[i][3]
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
                     
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1)
-                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1, lifeTime=0.1)
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1)
+                    if self.DRONE_ID == 0:
+                        if self.RAYS_INFO[i,1] < 0.2:
+                            rayHitColor = [1, 0, 0]
+                        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
 
@@ -542,4 +559,34 @@ class BaseRouting(object):
         else:
             self.DETECTED_OBS_DATA = {}
     
-    
+    import numpy as np
+
+    def _generateWaypoints(self,home_pos, destination, num_waypoints):
+        """
+        Generate waypoints in 3D for a straight line from home_pos to destination.
+
+        Parameters:
+        - home_pos: tuple of floats (x, y, z) representing the starting position.
+        - destination: tuple of floats (x, y, z) representing the destination position.
+        - num_waypoints: integer, number of waypoints to generate along the path.
+
+        Returns:
+        - waypoints: numpy array of shape (3, num_waypoints) where each row is x, y, z coordinates.
+        """
+        # Generate an array of points from 0 to 1 with num_waypoints
+        t_values = np.linspace(0, 1, num_waypoints+2)
+
+        # Interpolate each dimension and stack as rows in a (3, num_waypoints) array
+        waypoints = np.array([
+            (1 - t_values) * home_pos[0] + t_values * destination[0],
+            (1 - t_values) * home_pos[1] + t_values * destination[1],
+            (1 - t_values) * home_pos[2] + t_values * destination[2]
+        ])
+        # Remove the first column to offset the path
+        waypoints = waypoints[:, 2:]  # Shape becomes (3, num_waypoints)
+
+        return waypoints
+
+
+
+

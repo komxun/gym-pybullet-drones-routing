@@ -148,50 +148,59 @@ def run(
 
     #### Run the simulation ####################################
     # action = np.zeros((num_drones,4))
-    START = time.time()
     
-    for i in range(0, int(duration_sec*env.CTRL_FREQ)):
-
-        #### Make it rain rubber ducks #############################
-        # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
-        # ======Random Action!!=========
-        action = random.randint(0, 10)
-        # action = 4
-        # if i<80:
-        #     action = 2
-        # else:
-        #     print(f"\nDecelerating!!!!!\n")
-        #     action = 1
-        # action = 0
-        # action = 1
-
-        #### Step the simulation ###################################
-        obs, reward, terminated, truncated, info = env.step(action)
-        # print(f"obs len = {len(obs[0])}")
-        print(f"truncated = {truncated}")
-        
-        #### Log the simulation ####################################
+    for _ in range(20):
+        epEnd = False
+        i = 0
+        START = time.time()
+        env.reset()
         # for j in range(num_drones):
-        #     logger.log(drone=j,
-        #                timestamp=i/env.CTRL_FREQ,
-        #                state=obs[j],
-        #                control=np.hstack([routing[j].TARGET_POS, INIT_XYZS[j, 2], INIT_RPYS[j, :], np.zeros(6)])
-        #                # control=np.hstack([INIT_XYZS[j, :]+TARGET_POS[wp_counters[j], :], INIT_RPYS[j, :], np.zeros(6)])
-        #                )
+        #     env.routing[j].reset()
+        while not epEnd:
 
-        #### Printout ##############################################
-        env.render()
+            #### Make it rain rubber ducks #############################
+            # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
+            # ======Random Action!!=========
+            action = random.randint(0, 10)
+            # action = 4
+            # if i<80:
+            #     action = 2
+            # else:
+            #     print(f"\nDecelerating!!!!!\n")
+            #     action = 1
+            # action = 0
+            # action = 1
 
-        #### Sync the simulation ###################################
-        if gui:
-            sync(i, START, env.CTRL_TIMESTEP)
+            #### Step the simulation ###################################
+            obs, reward, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                epEnd = True
+            # print(f"obs len = {len(obs[0])}")
+            print(f"truncated = {truncated}")
+            
+            #### Log the simulation ####################################
+            # for j in range(num_drones):
+            #     logger.log(drone=j,
+            #                timestamp=i/env.CTRL_FREQ,
+            #                state=obs[j],
+            #                control=np.hstack([routing[j].TARGET_POS, INIT_XYZS[j, 2], INIT_RPYS[j, :], np.zeros(6)])
+            #                # control=np.hstack([INIT_XYZS[j, :]+TARGET_POS[wp_counters[j], :], INIT_RPYS[j, :], np.zeros(6)])
+            #                )
+
+            #### Printout ##############################################
+            env.render()
+
+            #### Sync the simulation ###################################
+            if gui:
+                sync(i, START, env.CTRL_TIMESTEP)
+            i+=1
 
     #### Close the environment #################################
     env.close()
 
     #### Save the simulation results ###########################
-    logger.save()
-    logger.save_as_csv("pid") # Optional CSV save
+    # logger.save()
+    # logger.save_as_csv("pid") # Optional CSV save
 
     #### Plot the simulation results ###########################
     if plot:

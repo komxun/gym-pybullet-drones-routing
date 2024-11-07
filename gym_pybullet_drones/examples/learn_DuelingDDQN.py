@@ -53,8 +53,11 @@ EPS = 1e-6
 BEEP = lambda: os.system("printf '\a'")
 RESULTS_DIR = os.path.join('..', 'results')
 # SEEDS = (12, 34, 56, 78, 90)
-SEEDS = (1,)
-DEFAULT_AGENTS = 16
+# SEEDS = (12, 34, 5)
+# SEEDS = tuple(range(100))
+SEEDS = range(1,)
+
+DEFAULT_AGENTS = 20
 
 
 dueling_ddqn_results = []
@@ -71,9 +74,9 @@ for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-sa-aviary-v0',
         'gamma': 0.9, # 0.995
-        'max_minutes': 10,
-        'max_episodes': 10000,
-        'goal_mean_100_reward': 1500  # 150 to be determined properly
+        'max_minutes': 20,
+        'max_episodes': 20000,
+        'goal_mean_100_reward': 4500  # 150 to be determined properly
     }
     
     # value_model_fn = lambda nS, nA: FCQ(nS, nA, hidden_dims=(512,128))

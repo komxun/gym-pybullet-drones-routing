@@ -59,6 +59,7 @@ class IFDSRoute(BaseRouting):
                      route_timestep,
                      cur_pos,
                      cur_quat,
+                     cur_rpy_rad,
                      cur_vel,
                      cur_ang_vel,
                      home_pos,
@@ -106,7 +107,9 @@ class IFDSRoute(BaseRouting):
         else:
             print("[Error] in IFDSRoute: Invalid PATH_OPTION")
         # p.removeAllUserDebugItems()
+        
         self._updateCurPos(cur_pos)
+        self._updateCurRpy(cur_rpy_rad)
         self._updateCurVel(cur_vel)
         self.route_counter += 1
         
@@ -316,6 +319,8 @@ class IFDSRoute(BaseRouting):
                 for j in range(len(Obj)):
                     # Reading Gamma for each obstacle
                     Gamma = Obj[j]['Gamma']
+                    # if Gamma<1:
+                    #     continue
                     # Unit normal and tangential vector
                     n = Obj[j]['n']
                     t = Obj[j]['t']
@@ -347,6 +352,9 @@ class IFDSRoute(BaseRouting):
                 for j in range(len(Obj)):
                     w_tilde = Obj[j]["w"]/sum_w
                     Mm = Mm + w_tilde*Obj[j]["M"] 
+                    # if Obj[j]['Gamma'] >= 1 :
+                    #     w_tilde = Obj[j]["w"]/sum_w
+                    #     Mm = Mm + w_tilde*Obj[j]["M"] 
                 
                 UBar = np.dot(Mm, u)
                 return UBar
@@ -445,7 +453,7 @@ class IFDSRoute(BaseRouting):
         def Shape(isDynamic, shape, x0, y0, z0, D, h=0.5):
             def CalcGamma():
                 Gamma = ((X - x0)/a)**(2*p) + ((Y - y0)/b)**(2*q) + ((Z - z0)/c)**(2*r)
-                return Gamma
+                return np.float64(Gamma)
             def CalcDg():
                 dGdx = (2*p*((X - x0)/a)**(2*p - 1))/a
                 dGdy = (2*q*((Y - y0)/b)**(2*q - 1))/b
@@ -467,14 +475,14 @@ class IFDSRoute(BaseRouting):
             
             Gamma = CalcGamma()
             (dGdx, dGdy, dGdz) = CalcDg()
-            n = np.array([[dGdx], [dGdy], [dGdz]])
+            n = np.array([[dGdx], [dGdy], [dGdz]], dtype=np.float64)
 
             rot = np.array([
                 [dGdy,  dGdx*dGdz, dGdx],
                 [-dGdx, dGdy*dGdz, dGdy],
-                [0, -(dGdx**2)-(dGdy**2), dGdz]])
+                [0, -(dGdx**2)-(dGdy**2), dGdz]], dtype=np.float64)
             
-            tprime = np.array([[np.cos(self.ALPHA)], [np.sin(self.ALPHA)], [0]])
+            tprime = np.array([[np.cos(self.ALPHA)], [np.sin(self.ALPHA)], [0]], dtype=np.float64)
             t = np.matmul(rot,tprime)
             # t = np.array([[dGdy],[-dGdx], [0]])
             origin = np.array([x0, y0, z0])
@@ -485,8 +493,9 @@ class IFDSRoute(BaseRouting):
         numObj = obstacles_pos.shape[0]
 
         for j in range(numObj):
-            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 0.8*obstacles_size[j][0])
             Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
+            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
+            # Shape(0, "cylinder",obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2],1,0.5)
             # Shape(0, "cylinder", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
     
         return Obj

@@ -13,21 +13,21 @@ else:
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+p.configureDebugVisualizer(rgbBackground=[1, 1, 1])
 #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING,0)
 
 #p.loadURDF("samurai.urdf")
-r2d2id = p.loadURDF("r2d2.urdf", [0, 0, 1])
+r2d2id = p.loadURDF("sphere2.urdf", [0, 0, 1])
 
 rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 100
-
-rayLen = 1.5
+numRays = 200
+rayLen  = 3
 
 rayHitColor = [1, 0, 0]
-rayMissColor = [0, 1, 0]
+rayMissColor = [0, 0, 0.5]
 
 replaceLines = True
 
@@ -78,7 +78,7 @@ for i in range(numSteps):
           p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lineWidth=2.5)
       else:
           hitPosition = results[i][3]
-          p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lineWidth=2.5)
+          p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lineWidth=3)
 
   #time.sleep(1./240.)
 kuy = [results[x] for x in range(len(results)) if results[x][0]  != -1]
