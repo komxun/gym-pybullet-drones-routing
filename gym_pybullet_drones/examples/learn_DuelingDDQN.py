@@ -8,6 +8,7 @@ import argparse
 import gymnasium as gym
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 print(f"CUDA is available : {torch.cuda.is_available()}")
 # print(torch.cuda.get_device_name(0))
 from gym_pybullet_drones.utils.Logger import Logger
@@ -51,13 +52,13 @@ LEAVE_PRINT_EVERY_N_SECS = 60
 ERASE_LINE = '\x1b[2K'
 EPS = 1e-6
 BEEP = lambda: os.system("printf '\a'")
-RESULTS_DIR = os.path.join('..', 'results')
+RESULTS_DIR = os.path.join('..', 'KOMSUN_results')
 # SEEDS = (12, 34, 56, 78, 90)
-# SEEDS = (12, 34, 5)
+SEEDS = (12, 34, 5)
 # SEEDS = tuple(range(100))
-SEEDS = range(1,)
+# SEEDS = range(1,)
 
-DEFAULT_AGENTS = 20
+DEFAULT_AGENTS = 1
 
 
 dueling_ddqn_results = []
@@ -74,8 +75,8 @@ for seed in SEEDS:
     environment_settings = {
         'env_name': 'autorouting-sa-aviary-v0',
         'gamma': 0.9, # 0.995
-        'max_minutes': 20,
-        'max_episodes': 20000,
+        'max_minutes': 60,
+        'max_episodes': 100,
         'goal_mean_100_reward': 4500  # 150 to be determined properly
     }
     
@@ -124,8 +125,162 @@ _ = BEEP()
 
 dueling_ddqn_agents[best_dueling_ddqn_agent_key].save_model()
 
+
+
 #%%
 # best_agent.demo_progression()
-# input("Press Enter to continue...")
-# dueling_ddqn_agents[best_dueling_ddqn_agent_key].demo_last()
+input("Press Enter to continue...")
+# ddqn_root_dir = os.path.join(RESULTS_DIR, 'ddqn')
+# ddqn_x = np.load(os.path.join(ddqn_root_dir, 'x.npy'))
 
+# ddqn_max_r = np.load(os.path.join(ddqn_root_dir, 'max_r.npy'))
+# ddqn_min_r = np.load(os.path.join(ddqn_root_dir, 'min_r.npy'))
+# ddqn_mean_r = np.load(os.path.join(ddqn_root_dir, 'mean_r.npy'))
+
+# ddqn_max_s = np.load(os.path.join(ddqn_root_dir, 'max_s.npy'))
+# ddqn_min_s = np.load(os.path.join(ddqn_root_dir, 'min_s.npy'))
+# ddqn_mean_s = np.load(os.path.join(ddqn_root_dir, 'mean_s.npy'))
+
+# ddqn_max_t = np.load(os.path.join(ddqn_root_dir, 'max_t.npy'))
+# ddqn_min_t = np.load(os.path.join(ddqn_root_dir, 'min_t.npy'))
+# ddqn_mean_t = np.load(os.path.join(ddqn_root_dir, 'mean_t.npy'))
+
+# ddqn_max_sec = np.load(os.path.join(ddqn_root_dir, 'max_sec.npy'))
+# ddqn_min_sec = np.load(os.path.join(ddqn_root_dir, 'min_sec.npy'))
+# ddqn_mean_sec = np.load(os.path.join(ddqn_root_dir, 'mean_sec.npy'))
+
+# ddqn_max_rt = np.load(os.path.join(ddqn_root_dir, 'max_rt.npy'))
+# ddqn_min_rt = np.load(os.path.join(ddqn_root_dir, 'min_rt.npy'))
+# ddqn_mean_rt = np.load(os.path.join(ddqn_root_dir, 'mean_rt.npy'))
+
+dueling_ddqn_max_t, dueling_ddqn_max_r, dueling_ddqn_max_s, \
+dueling_ddqn_max_sec, dueling_ddqn_max_rt = np.max(dueling_ddqn_results, axis=0).T
+dueling_ddqn_min_t, dueling_ddqn_min_r, dueling_ddqn_min_s, \
+dueling_ddqn_min_sec, dueling_ddqn_min_rt = np.min(dueling_ddqn_results, axis=0).T
+dueling_ddqn_mean_t, dueling_ddqn_mean_r, dueling_ddqn_mean_s, \
+dueling_ddqn_mean_sec, dueling_ddqn_mean_rt = np.mean(dueling_ddqn_results, axis=0).T
+dueling_ddqn_x = np.arange(np.max(
+    (len(dueling_ddqn_mean_s), len(dueling_ddqn_mean_s))))
+
+
+#%% PLOT
+fig, axs = plt.subplots(5, 1, figsize=(15,30), sharey=False, sharex=True)
+
+
+# Dueling DDQN
+axs[0].plot(dueling_ddqn_max_r, 'r', linewidth=1)
+axs[0].plot(dueling_ddqn_min_r, 'r', linewidth=1)
+axs[0].plot(dueling_ddqn_mean_r, 'r:', label='Dueling DDQN', linewidth=2)
+axs[0].fill_between(
+    dueling_ddqn_x, dueling_ddqn_min_r, dueling_ddqn_max_r, facecolor='r', alpha=0.3)
+
+axs[1].plot(dueling_ddqn_max_s, 'r', linewidth=1)
+axs[1].plot(dueling_ddqn_min_s, 'r', linewidth=1)
+axs[1].plot(dueling_ddqn_mean_s, 'r:', label='Dueling DDQN', linewidth=2)
+axs[1].fill_between(
+    dueling_ddqn_x, dueling_ddqn_min_s, dueling_ddqn_max_s, facecolor='r', alpha=0.3)
+
+axs[2].plot(dueling_ddqn_max_t, 'r', linewidth=1)
+axs[2].plot(dueling_ddqn_min_t, 'r', linewidth=1)
+axs[2].plot(dueling_ddqn_mean_t, 'r:', label='Dueling DDQN', linewidth=2)
+axs[2].fill_between(
+    dueling_ddqn_x, dueling_ddqn_min_t, dueling_ddqn_max_t, facecolor='r', alpha=0.3)
+
+axs[3].plot(dueling_ddqn_max_sec, 'r', linewidth=1)
+axs[3].plot(dueling_ddqn_min_sec, 'r', linewidth=1)
+axs[3].plot(dueling_ddqn_mean_sec, 'r:', label='Dueling DDQN', linewidth=2)
+axs[3].fill_between(
+    dueling_ddqn_x, dueling_ddqn_min_sec, dueling_ddqn_max_sec, facecolor='r', alpha=0.3)
+
+axs[4].plot(dueling_ddqn_max_rt, 'r', linewidth=1)
+axs[4].plot(dueling_ddqn_min_rt, 'r', linewidth=1)
+axs[4].plot(dueling_ddqn_mean_rt, 'r:', label='Dueling DDQN', linewidth=2)
+axs[4].fill_between(
+    dueling_ddqn_x, dueling_ddqn_min_rt, dueling_ddqn_max_rt, facecolor='r', alpha=0.3)
+
+# ALL
+axs[0].set_title('Moving Avg Reward (Training)')
+axs[1].set_title('Moving Avg Reward (Evaluation)')
+axs[2].set_title('Total Steps')
+axs[3].set_title('Training Time')
+axs[4].set_title('Wall-clock Time')
+plt.xlabel('Episodes')
+axs[0].legend(loc='upper left')
+plt.show()
+
+dueling_ddqn_root_dir = os.path.join(RESULTS_DIR, 'dueling_ddqn')
+not os.path.exists(dueling_ddqn_root_dir) and os.makedirs(dueling_ddqn_root_dir)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'x'), dueling_ddqn_x)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'max_r'), dueling_ddqn_max_r)
+np.save(os.path.join(dueling_ddqn_root_dir, 'min_r'), dueling_ddqn_min_r)
+np.save(os.path.join(dueling_ddqn_root_dir, 'mean_r'), dueling_ddqn_mean_r)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'max_s'), dueling_ddqn_max_s)
+np.save(os.path.join(dueling_ddqn_root_dir, 'min_s'), dueling_ddqn_min_s )
+np.save(os.path.join(dueling_ddqn_root_dir, 'mean_s'), dueling_ddqn_mean_s)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'max_t'), dueling_ddqn_max_t)
+np.save(os.path.join(dueling_ddqn_root_dir, 'min_t'), dueling_ddqn_min_t)
+np.save(os.path.join(dueling_ddqn_root_dir, 'mean_t'), dueling_ddqn_mean_t)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'max_sec'), dueling_ddqn_max_sec)
+np.save(os.path.join(dueling_ddqn_root_dir, 'min_sec'), dueling_ddqn_min_sec)
+np.save(os.path.join(dueling_ddqn_root_dir, 'mean_sec'), dueling_ddqn_mean_sec)
+
+np.save(os.path.join(dueling_ddqn_root_dir, 'max_rt'), dueling_ddqn_max_rt)
+np.save(os.path.join(dueling_ddqn_root_dir, 'min_rt'), dueling_ddqn_min_rt)
+np.save(os.path.join(dueling_ddqn_root_dir, 'mean_rt'), dueling_ddqn_mean_rt)
+
+
+#%%
+
+# q_values = dueling_ddqn_agents[best_dueling_ddqn_agent_key].online_model(state).detach().cpu().numpy()[0]
+# print(f"\nq values = {q_values}\n")
+# q_s = q_values
+# v_s = q_values.mean()
+# a_s = q_values - q_values.mean()
+
+# plt.bar(('a1 (accelerate)','a2 (decelerate)', 'a3 (stop and hove)', 'a4 (follow global path)', 'a5 (follow local path #1)', \
+#          'a6 (follow local path #2)', 'a7 (follow local path #3)', 'a8 (follow local path #4)', 'a9 (follow local path #5)',\
+#          'a10 (follow local path #6)', 'a11 (follow local path #7)', 'a12 (follow local path #8)'), q_s)
+# plt.xlabel('Action')
+# plt.ylabel('Estimate')
+# plt.title("Action-value function, Q(" + str(np.round(state,2)) + ")")
+# plt.show()
+
+# %% Violin plot
+env = make_env_fn(**make_env_kargs, seed=123, monitor_mode='evaluation')
+
+states = []
+for agent in dueling_ddqn_agents.values():
+    for episode in range(100):
+        state, done = env.reset(), False
+        while not done:
+            states.append(state)
+            action = agent.evaluation_strategy.select_action(agent.online_model, state)
+            state, _, done, _ = env.step(action)
+env.close()
+del env
+
+x = np.array(states)[:,0]
+xd = np.array(states)[:,1]
+a = np.array(states)[:,2]
+ad = np.array(states)[:,3]
+
+parts = plt.violinplot((x, xd, a, ad), 
+                       vert=False, showmeans=False, showmedians=False, showextrema=False)
+
+colors = ['red','green','yellow','blue']
+for i, pc in enumerate(parts['bodies']):
+    pc.set_facecolor(colors[i])
+    pc.set_edgecolor(colors[i])
+    pc.set_alpha(0.5)
+
+plt.yticks(range(1,5), ["cart position", "cart velocity", "pole angle", "pole velocity"])
+plt.yticks(rotation=45)
+plt.title('Range of state-variable values for ' + str(
+    dueling_ddqn_agents[best_dueling_ddqn_agent_key].__class__.__name__))
+
+plt.show()

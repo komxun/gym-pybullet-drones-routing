@@ -86,7 +86,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
 
         # ---------Reward design-------------
         reachThreshold_m = 0.5  #0.2
-        reward_choice = 12  # 4:best  8: best  10: 2nd best 11: Good
+        reward_choice = 13  # 4:best  8: best  10: 2nd best 11: Good
         # prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
         # d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
         # h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
@@ -183,7 +183,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
             """Same as reward11, but tweak collide reward"""
             step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
             collide_reward = -10 + step_reward
-            too_close_reward = -1  #-2 
+            too_close_reward = -2  #-2 
             # Apply a scaling factor and decay constant for the too-close penalty
             decay_constant = 1  # Adjust this constant to control the exponential steepness
             destin_reward = 100*h2destin
@@ -218,6 +218,34 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                 # print(f"\nThat's too close!! ret = {ret}\n")
             # elif any(self.routing[0].RAYS_INFO[:,1]<0.2):
             #     ret = too_close_reward
+        elif reward_choice == 13:
+            desire_reach_time_s = 20
+            desire_num_step = desire_reach_time_s * self.PYB_FREQ
+            step_reward = -(d2destin/desire_num_step)/h2destin
+            collide_reward = -2
+            destin_reward = 2
+            too_close_reward = -1
+
+
+            if np.linalg.norm(self.routing[0].DESTINATION-state[0:3]) < reachThreshold_m:
+                ret = destin_reward
+                print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
+
+            elif int(self.CONTACT_FLAGS[0]) == 1:
+                ret = collide_reward
+                print(f"\n***Collided*** ret = {ret}\n")
+            
+            elif any(self.routing[0].RAYS_INFO[:,1]<0.2):
+                ret = too_close_reward
+            else:
+                ret = step_reward
+                if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+                # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                    
+                    # ret = step_reward/2
+                    ret = 2*step_reward
+                    # ret = 0
+                
 
 
         return ret

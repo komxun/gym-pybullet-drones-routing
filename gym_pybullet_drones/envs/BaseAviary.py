@@ -493,6 +493,7 @@ class BaseAviary(gym.Env):
                                               self.INIT_XYZS[i,:],
                                               p.getQuaternionFromEuler(self.INIT_RPYS[i,:]),
                                               flags = p.URDF_USE_INERTIA_FROM_FILE,
+                                              globalScaling = 1,
                                               physicsClientId=self.CLIENT
                                               ) for i in range(self.NUM_DRONES)])
         #### Remove default damping #################################

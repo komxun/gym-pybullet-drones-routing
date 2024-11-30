@@ -727,7 +727,11 @@ class RoutingAviary(BaseAviary):
             pos_drone, orn_drone = p.getBasePositionAndOrientation(droneList[j])
             vsd_drone = p.getVisualShapeData(droneList[j])
             
+            
             mod_vsd_drone = np.array(vsd_drone[0][3])/10
+            # mod_vsd_drone = np.array(vsd_drone[0][3])/5
+            # mod_vsd_drone = np.array(vsd_drone[0][3])
+            # print(f"mod_vsd_drone = {mod_vsd_drone}")
             drone_size = tuple(mod_vsd_drone)
             self.OBSTACLE_DATA[str(droneList[j])] = {"position": pos_drone,
                                                    "size": drone_size}

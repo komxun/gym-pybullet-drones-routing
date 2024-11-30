@@ -48,14 +48,14 @@ class RouteMission:
         # Define constants
         ORIGIN = [0, 9, 1]     # Reference point for positioning
         BASE_R = 4             # Base radius for initial position
-        BASE_R_D = 2          # Base radius for destination position
+        BASE_R_D = 4          # Base radius for destination position
         H_STEP = 0           # Base vertical step increment for each drone
-        RADIUS_VARIATION = 1 # Max random variation for radius
-        # RADIUS_VARIATION = 0.2
+        # RADIUS_VARIATION = 1 # Max random variation for radius
+        RADIUS_VARIATION = 0.2
         # ANGLE_VARIATION = 0.2  # Max random variation for angle (in radians)
         ANGLE_VARIATION = 90 * np.pi/180
-        Z_VARIATION = 0.2  #0.3     # Max random variation for initial z-axis
-        # Z_VARIATION = 0.1
+        # Z_VARIATION = 0.2  #0.3     # Max random variation for initial z-axis
+        Z_VARIATION = 0.1
 
         # Initialize arrays
         INIT_XYZS = np.zeros((num_drones, 3))
@@ -64,7 +64,7 @@ class RouteMission:
         WAYPOINTS = []
 
         # Set the first drone's position, orientation, and destination explicitly
-        INIT_XYZS[0] = [0, -0.7, ORIGIN[2]]
+        INIT_XYZS[0] = [0, 0, ORIGIN[2]]
         INIT_RPYS[0] = [0, 0, 0]
         DESTINS[0] = [0, 11, 1]
         WAYPOINTS.append(np.vstack((INIT_XYZS[0], DESTINS[0])))
@@ -72,7 +72,10 @@ class RouteMission:
         # Position remaining drones in circular paths with added randomness
         for i in range(1, num_drones):
             # Random radius and angle variations for initial positions
-            random_radius = BASE_R + random.uniform(-RADIUS_VARIATION, RADIUS_VARIATION)
+            if i==0:
+                random_radius = BASE_R+2
+            else:
+                random_radius = BASE_R + random.uniform(-RADIUS_VARIATION, RADIUS_VARIATION)
             random_angle_init = (i / num_drones) * 2 * np.pi + np.pi / 2 + random.uniform(-ANGLE_VARIATION, ANGLE_VARIATION)
             
             # Initial position with random radius and angle

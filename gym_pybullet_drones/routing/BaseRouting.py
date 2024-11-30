@@ -106,9 +106,6 @@ class BaseRouting(object):
         # self.RAY_LEN_M = 5
         # self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
         
-        
-    
-        
         self.reset()
 
     ################################################################################
