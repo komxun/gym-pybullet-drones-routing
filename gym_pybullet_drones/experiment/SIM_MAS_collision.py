@@ -49,7 +49,7 @@ DEFAULT_CONTROL_FREQ_HZ = 60
 DEFAULT_DURATION_SEC = 90
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
-DEFAULT_NUM_DRONES = 20
+DEFAULT_NUM_DRONES = 5
 DEFAULT_SCENARIO = 2
 
 
@@ -162,9 +162,11 @@ def run(
                     routing[j].setGlobalRoute(path)
             
             if j==0:
+                # Main drone (drone#0) : Follow adaptive local path only
                 routing[j]._setCommand(SpeedCommandFlag, "accelerate",2)
                 routing[j]._setCommand(RouteCommandFlag, "follow_local")
             else:
+                # Other drone : Follow global path
                 routing[j]._setCommand(SpeedCommandFlag, "accelerate", random.random())
                 # routing[j]._setCommand(SpeedCommandFlag, "accelerate",2)
                 routing[j]._setCommand(RouteCommandFlag, "follow_global")

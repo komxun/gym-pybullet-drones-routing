@@ -72,7 +72,7 @@ class DuelingDDQN():
 
         self.checkpoint_dir = tempfile.mkdtemp()
         #by Komsun 
-        # make_env_fn, make_env_kargs = get_make_env_fn(env_name='autorouting-sa-aviary-v0', num_drones=20)
+        # make_env_fn, make_env_kargs = get_make_env_fn(env_name='autorouting-sa-aviary-v0', num_drones=2)
         #----
         self.make_env_fn = make_env_fn
         self.make_env_kargs = make_env_kargs
@@ -83,6 +83,9 @@ class DuelingDDQN():
         torch.manual_seed(self.seed) ; np.random.seed(self.seed) ; random.seed(self.seed)
     
         nS, nA = env.observation_space.shape[0], env.action_space.n
+        # By Komsun (for MARL)
+        # nS, nA = env.observation_space.shape[0], env.action_space.shape[0]
+
         print(f"nS = {nS}, nA = {nA}")
 
         self.episode_timestep = []
@@ -196,7 +199,8 @@ class DuelingDDQN():
     
     def evaluate(self, eval_policy_model, eval_env, n_episodes=1):
         rs = []
-        for _ in range(n_episodes):
+        for ep_eval in range(n_episodes):
+            print(f"+++++ Evaluating - ep.{ep_eval}")
             # s, d = eval_env.reset(), False
             s, info = eval_env.reset(seed = self.seed)
             d = False

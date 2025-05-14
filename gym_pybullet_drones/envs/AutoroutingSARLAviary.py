@@ -243,7 +243,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                 # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
                     
                     # ret = step_reward/2
-                    ret = 2*step_reward
+                    ret = 2*step_reward # since step_reward is negative
                     # ret = 0
                 
 

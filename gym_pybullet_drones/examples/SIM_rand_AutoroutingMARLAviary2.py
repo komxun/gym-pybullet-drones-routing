@@ -25,11 +25,14 @@ import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
+import random
+
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
-from gym_pybullet_drones.envs.MASAviary import MASAviary
+from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
+from gym_pybullet_drones.envs.AutoroutingMARLAviary import AutoroutingMARLAviary
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
@@ -37,16 +40,16 @@ from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedComma
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 DEFAULT_DRONES = DroneModel("cf2x")
-DEFAULT_NUM_DRONES = 4
+DEFAULT_NUM_DRONES = 5
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
 DEFAULT_PLOT = False
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
-DEFAULT_SIMULATION_FREQ_HZ = 60
-DEFAULT_CONTROL_FREQ_HZ = 60
-DEFAULT_DURATION_SEC = 12
+DEFAULT_SIMULATION_FREQ_HZ = 240
+DEFAULT_CONTROL_FREQ_HZ = 48
+DEFAULT_DURATION_SEC = 20
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
 
@@ -70,38 +73,21 @@ def run(
     H_STEP = .05
     R = .3
     # INIT_XYZS = np.array([[R*np.cos((i/6)*2*np.pi+np.pi/2), R*np.sin((i/6)*2*np.pi+np.pi/2)-R, H+i*H_STEP] for i in range(num_drones)])
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 0.5+ 0.05*i ] for i in range(ARGS.num_drones)])
+    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 1.3+ 0.05*i ] for i in range(ARGS.num_drones)])
     INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
 
     #### Create the environment ################################
-    # env = CtrlAviary(drone_model=drone,
-    #                     num_drones=num_drones,
-    #                     initial_xyzs=INIT_XYZS,
-    #                     initial_rpys=INIT_RPYS,
-    #                     physics=physics,
-    #                     neighbourhood_radius=10,
-    #                     pyb_freq=simulation_freq_hz,
-    #                     ctrl_freq=control_freq_hz,
-    #                     gui=gui,
-    #                     record=record_video,
-    #                     obstacles=obstacles,
-    #                     user_debug_gui=user_debug_gui
-    #                     )
-    
-    env = MASAviary(drone_model=drone,
-                    num_drones=num_drones,
-                    initial_xyzs=INIT_XYZS,
-                    initial_rpys=INIT_RPYS,
-                    physics=physics,
-                    neighbourhood_radius=10,
-                    pyb_freq=simulation_freq_hz,
-                    ctrl_freq=control_freq_hz,
-                    gui=gui,
-                    record=record_video,
-                    obstacles=obstacles,
-                    user_debug_gui=user_debug_gui
-                    )
-    
+    env = AutoroutingMARLAviary(
+                 drone_model = drone,
+                 num_drones = DEFAULT_NUM_DRONES, 
+                 initial_xyzs=INIT_XYZS,
+                 initial_rpys=INIT_RPYS,
+                 physics= physics,
+                 pyb_freq=simulation_freq_hz,
+                 ctrl_freq=control_freq_hz,
+                 gui=gui,
+                 record=record_video,
+                 )
 
     #### Obtain the PyBullet Client ID from the environment ####
     PYB_CLIENT = env.getPyBulletClient()
@@ -118,73 +104,54 @@ def run(
         ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
         
     #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone, drone_id = i) for i in range(num_drones)]
+    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
     routeCounter = 1
 
     #### Run the simulation ####################################
-    action = np.zeros((num_drones,4))
-    START = time.time()
+    # action = np.zeros((num_drones,4))
     
-    for i in range(0, int(duration_sec*env.CTRL_FREQ)):
-
-        #### Make it rain rubber ducks #############################
-        # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
-        #### Step the simulation ###################################
-        obs, reward, terminated, truncated, info = env.step(action)
-
-        #### Compute control for the current way point #############
-        for j in range(num_drones):
-            
-            
-            #------- Compute route (waypoint) to follow ----------------
-            foundPath, path = routing[j].computeRouteFromState(route_timestep=routing[j].route_counter, 
-                                                  state = obs[j], 
-                                                  home_pos = np.array((0,0,0)), 
-                                                  target_pos = np.array((((-1)**j)*(j*0.2), 12, 0.5)),
-                                                  speed_limit = env.SPEED_LIMIT,
-                                                  obstacle_data = env.OBSTACLE_DATA,
-                                                  drone_ids = env.DRONE_IDS
-                                                  )
-            
-            if foundPath>0:
-                routeCounter+=1
-                if routeCounter==2:
-                    routing[j].setGlobalRoute(path)
+    for _ in range(20):
         
-            
-            # if i>150:
-            #     routing[j]._setCommand(SpeedCommandFlag, "hover")
-            # else:
-            #     routing[j]._setCommand(SpeedCommandFlag, "constant",0.1)
-            routing[j]._setCommand(SpeedCommandFlag, "constant",0.5)
-            routing[j]._setCommand(RouteCommandFlag, "follow_local")
-            
-            
-            action[j, :], _, _ = ctrl[j].computeControlFromState(control_timestep=env.CTRL_TIMESTEP,
-                                                                    state=obs[j],
-                                                                    target_pos=routing[j].TARGET_POS,
-                                                                    target_rpy=INIT_RPYS[j, :],
-                                                                    target_vel = routing[j].TARGET_VEL
-                                                                    )
-            
-            # p.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=-45, cameraPitch=-60, cameraTargetPosition=routing[0].CUR_POS)
-            p.resetDebugVisualizerCamera(cameraDistance=0.5, cameraYaw=0, cameraPitch=-20, cameraTargetPosition=routing[0].CUR_POS)
-
-        #### Log the simulation ####################################
+        epEnd = False
+        i = 0
+        START = time.time()
+        env.reset()
         # for j in range(num_drones):
-        #     logger.log(drone=j,
-        #                timestamp=i/env.CTRL_FREQ,
-        #                state=obs[j],
-        #                control=np.hstack([routing[j].TARGET_POS, INIT_XYZS[j, 2], INIT_RPYS[j, :], np.zeros(6)])
-        #                # control=np.hstack([INIT_XYZS[j, :]+TARGET_POS[wp_counters[j], :], INIT_RPYS[j, :], np.zeros(6)])
-        #                )
+        #     env.routing[j].reset()
+        while not epEnd:
 
-        #### Printout ##############################################
-        env.render()
+            # ======Random Action!!=========
+            # action = {
+            #     f"drone_{j}": random.randint(0, 11)  # 12 discrete actions: 0 to 11
+            #     for j in range(env.NUM_DRONES)
+            # }
+            action = [random.randint(0, 10) for _ in range(DEFAULT_NUM_DRONES)]
 
-        #### Sync the simulation ###################################
-        if gui:
-            sync(i, START, env.CTRL_TIMESTEP)
+            #### Step the simulation ###################################
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            p.resetDebugVisualizerCamera(cameraDistance=2, cameraYaw=45, cameraPitch=-60, cameraTargetPosition=obs[0:3])
+            if terminated or truncated:
+                epEnd = True
+            # print(f"obs len = {len(obs[0])}")
+            print(f"truncated = {truncated}")
+            
+            #### Log the simulation ####################################
+            # for j in range(num_drones):
+            #     logger.log(drone=j,
+            #                timestamp=i/env.CTRL_FREQ,
+            #                state=obs[j],
+            #                control=np.hstack([routing[j].TARGET_POS, INIT_XYZS[j, 2], INIT_RPYS[j, :], np.zeros(6)])
+            #                # control=np.hstack([INIT_XYZS[j, :]+TARGET_POS[wp_counters[j], :], INIT_RPYS[j, :], np.zeros(6)])
+            #                )
+
+            #### Printout ##############################################
+            env.render()
+
+            #### Sync the simulation ###################################
+            if gui:
+                sync(i, START, env.CTRL_TIMESTEP)
+            i+=1
 
     #### Close the environment #################################
     env.close()
@@ -193,9 +160,9 @@ def run(
     # logger.save()
     # logger.save_as_csv("pid") # Optional CSV save
 
-    # #### Plot the simulation results ###########################
-    # if plot:
-    #     logger.plot()
+    #### Plot the simulation results ###########################
+    if plot:
+        logger.plot()
 
 if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##

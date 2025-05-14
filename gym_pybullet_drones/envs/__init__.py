@@ -6,3 +6,4 @@ from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
 from gym_pybullet_drones.envs.AutoroutingSARLAviary import AutoroutingSARLAviary
+from gym_pybullet_drones.envs.AutoroutingMARLAviary import AutoroutingMARLAviary

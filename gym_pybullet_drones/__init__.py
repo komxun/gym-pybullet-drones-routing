@@ -30,6 +30,10 @@ register(
     entry_point='gym_pybullet_drones.envs:AutoroutingSARLAviary',
 )
 
+register(
+    id='autorouting-marl-aviary-v0',
+    entry_point='gym_pybullet_drones.envs:AutoroutingMARLAviary',
+)
 
 register(
     id='routing-aviary-v0',
