@@ -13,6 +13,7 @@ from gym_pybullet_drones.utils.utils import sync, str2bool
 # https://docs.ray.io/en/latest/rllib/package_ref/env/multi_agent_env.html#module-ray.rllib.env.multi_agent_env
 ma_AutoroutingSARLAviary_cls = make_multi_agent('autorouting-sa-aviary-v0')
 
+
 env = ma_AutoroutingSARLAviary_cls({"num_agents": 2})
 
 
