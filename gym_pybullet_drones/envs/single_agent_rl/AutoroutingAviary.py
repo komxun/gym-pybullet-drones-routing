@@ -163,12 +163,18 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         MAX_Z = MAX_LIN_VEL_Z*self.EPISODE_LEN_SEC
 
         MAX_PITCH_ROLL = np.pi # Full range
+        MAX_RANGE = 2*np.linalg.norm(self.routing.HOME_POS.reshape(3,1) - self.routing.DESTINATION.reshape(3,1))
+        d2destin = np.linalg.norm(state[0:3].reshape(3,1) - self.routing.DESTINATION.reshape(3,1))
 
+        # [X, Y, Z, R, P, Y, Vx, Vy, Vz, Wx, Wy, Wz, d2destin]
+        # clipped_pos_xy = np.clip(state[0:2], -MAX_XY, MAX_XY)
         clipped_pos_xy = np.clip(state[0:2], -MAX_XY, MAX_XY)
         clipped_pos_z = np.clip(state[2], 0, MAX_Z)
         clipped_rp = np.clip(state[7:9], -MAX_PITCH_ROLL, MAX_PITCH_ROLL)
         clipped_vel_xy = np.clip(state[10:12], -MAX_LIN_VEL_XY, MAX_LIN_VEL_XY)
         clipped_vel_z = np.clip(state[12], -MAX_LIN_VEL_Z, MAX_LIN_VEL_Z)
+        clipped_d2destin = np.clip(d2destin, 0, MAX_RANGE)
+
 
         if self.GUI:
             self._clipAndNormalizeStateWarning(state,
@@ -186,6 +192,7 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
         normalized_vel_xy = clipped_vel_xy / MAX_LIN_VEL_XY
         normalized_vel_z = clipped_vel_z / MAX_LIN_VEL_XY
         normalized_ang_vel = state[13:16]/np.linalg.norm(state[13:16]) if np.linalg.norm(state[13:16]) != 0 else state[13:16]
+        normalized_d2destin = clipped_d2destin/ MAX_RANGE
 
         norm_and_clipped = np.hstack([normalized_pos_xy,
                                       normalized_pos_z,
@@ -195,7 +202,8 @@ class AutoroutingAviary(ExtendedSingleAgentAviary):
                                       normalized_vel_xy,
                                       normalized_vel_z,
                                       normalized_ang_vel,
-                                      state[16:20]
+                                      state[16:20],
+                                      normalized_d2destin
                                       ]).reshape(20,)
 
         return norm_and_clipped

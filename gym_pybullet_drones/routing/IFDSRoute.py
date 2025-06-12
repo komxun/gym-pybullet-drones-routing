@@ -1,9 +1,9 @@
 import math
 import numpy as np
-# import pybullet as p
+import pybullet as p
 
-from gym_pybullet_drones.routing.BaseRouting import BaseRouting, SpeedCommandFlag, SpeedStatus
-from gym_pybullet_drones.envs.BaseAviary import DroneModel, BaseAviary
+from gym_pybullet_drones.routing.BaseRouting import BaseRouting, SpeedCommandFlag, RouteStatus
+from gym_pybullet_drones.envs.BaseAviary import DroneModel
 # from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 # from gym_pybullet_drones.utils.utils import nnlsRPM
 
@@ -14,6 +14,7 @@ class IFDSRoute(BaseRouting):
 
     def __init__(self,
                  drone_model: DroneModel,
+                 drone_id,
                  g: float=9.8
                  ):
         """Common routing classes __init__ method.
@@ -26,17 +27,19 @@ class IFDSRoute(BaseRouting):
             The gravitational acceleration in m/s^2.
 
         """
-        super().__init__(drone_model=drone_model, g=g)
+        super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
         # self.RHO0_IFDS = 6.5
         self.RHO0_IFDS = 8.5
-        self.SIGMA0_IFDS = 1  # 1
+        self.SIGMA0_IFDS = 2
+        self.ALPHA = 0
         self.SF_IFDS = 0
-        self.TARGET_THRESH = 0.5
-        # self.SIM_MODE = 2
-        self.DT = 0.5  # 0.1
-        self.TSIM = 60
+        self.TARGET_THRESH = 0.1
+        self.SIM_MODE = 2
+        self.DT = 0.5  # 0.1  #0.5
+        self.TSIM = 10
         self.RTSIM = 200
+        self.REACH_DESTIN = 0
         
         self.reset()
 
@@ -49,11 +52,6 @@ class IFDSRoute(BaseRouting):
 
         """
         super().reset()
-        #### Initialized PID control variables #####################
-        self.last_pos_e = np.zeros(3)
-        self.integral_pos_e = np.zeros(3)
-        self.last_rpy_e = np.zeros(3)
-        self.integral_rpy_e = np.zeros(3)
     
     ################################################################################
     
@@ -61,12 +59,14 @@ class IFDSRoute(BaseRouting):
                      route_timestep,
                      cur_pos,
                      cur_quat,
+                     cur_rpy_rad,
                      cur_vel,
                      cur_ang_vel,
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacle_data=None
+                     obstacle_data,
+                     drone_ids
                      ):
         """Computes the IFDS path for a single drone.
 
@@ -88,7 +88,28 @@ class IFDSRoute(BaseRouting):
         -------
 
         """
+        if self.PATH_OPTION == 1:
+            self.ALPHA = 0
+        elif self.PATH_OPTION == 2:
+            self.ALPHA = (1/4)*np.pi
+        elif self.PATH_OPTION == 3:
+            self.ALPHA = (2/4)*np.pi
+        elif self.PATH_OPTION == 4:
+            self.ALPHA = (3/4)*np.pi
+        elif self.PATH_OPTION == 5:
+            self.ALPHA = np.pi
+        elif self.PATH_OPTION == 6:
+            self.ALPHA = (5/4)*np.pi
+        elif self.PATH_OPTION == 7:
+            self.ALPHA = (6/4)*np.pi
+        elif self.PATH_OPTION == 8:
+            self.ALPHA = (7/4)*np.pi
+        else:
+            print("[Error] in IFDSRoute: Invalid PATH_OPTION")
+        # p.removeAllUserDebugItems()
+        
         self._updateCurPos(cur_pos)
+        self._updateCurRpy(cur_rpy_rad)
         self._updateCurVel(cur_vel)
         self.route_counter += 1
         
@@ -104,7 +125,7 @@ class IFDSRoute(BaseRouting):
         self._guidanceFromRoute(path, route_timestep, speed_limit)
         
         self._plotRoute(path)
-        self._batchRayCast()
+        self._batchRayCast(drone_ids)
         return foundPath, path
     ################################################################################
     
@@ -121,6 +142,7 @@ class IFDSRoute(BaseRouting):
         # Process Command
         self._processCommand()
         self._updateTargetPosAndVel(path, route_timestep, speed_limit)
+        self._resetAllCommands()
      
             
     ################################################################################
@@ -129,42 +151,64 @@ class IFDSRoute(BaseRouting):
         path_vect_unit = self._waypointSkipping(path, route_timestep, speed_limit)
         self._updateTargetVel(route_timestep, speed_limit, path_vect_unit)
         
-        self._resetRouteCommand()
-        self._resetSpeedCommand()
-        
     def _updateTargetVel(self, route_timestep, speed_limit, path_vect_unit):
         # -------------------- Target Velocity Vector ----------------------
         curSpeed = np.linalg.norm(self.CUR_VEL)
+        # print(f"\n Current Speed = {curSpeed}\n")
         
-        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 1:
+        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.2:
             # print("Reaching destination -> Stopping . . .")
             self.TARGET_VEL = np.zeros(3)
+            self.REACH_DESTIN = 1
             # acceleration = 0
+        # elif self.STAT[1].name == 'DECELERATE' and np.linalg.norm(self.CUR_VEL) <= 0.3:
+        #     print("stopping")
+        #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
+        #     self._setCommand(SpeedCommandFlag, "hover")
         else:
             # if np.linalg.norm(self.CUR_POS - self.DESTINATION) < 4: # [m]
             #     print("Approaching destination -> Decelerating . . .")
             #     self._setCommand(SpeedCommandFlag, "accelerate", -0.02)  # [m/s^2]
-            
+            self.REACH_DESTIN = 0
             if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
                 acceleration = self.COMMANDS[1]._value
                 # self.TARGET_VEL = (curSpeed + acceleration*route_timestep*100) * path_vect_unit
-                self.TARGET_VEL = (curSpeed + acceleration*self.route_counter*0.01) * path_vect_unit
-            
+                # self.TARGET_VEL = (curSpeed + acceleration*self.route_counter*0.01) * path_vect_unit
+    
+                # print(f"\ncurSpeed + accel*dt = {(curSpeed + acceleration*self.DT)}\n")
+                self.TARGET_VEL = (curSpeed + acceleration*self.DT) * path_vect_unit
+            elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
+                if self.COMMANDS[1]._value:
+                    self.TARGET_VEL = self.COMMANDS[1]._value * path_vect_unit
+                else:
+                    self.TARGET_VEL = curSpeed * path_vect_unit
+               
         self._processTargetVel(speed_limit)
             
     def _processTargetVel(self, speed_limit):
-        # Process target_vel
-        # if np.linalg.norm(self.TARGET_VEL) <= 0.03:
-        #     print("stopping")
-        #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
-        #     self._setCommand(SpeedCommandFlag, "hover")
+        
+        # print(f"{self.COMMANDS[1]._name}:  {self.COMMANDS[1]._value}")
+        if self.COMMANDS[1]._name != 'none' and self.COMMANDS[1]._name != 'hover' and self.STAT[1].name != "HOVERING":
+
+            if  np.linalg.norm(self.TARGET_VEL) > speed_limit:
+                # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
+                # self.TARGET_VEL = np.zeros(3)
+                
+                # self.TARGET_VEL = speed_limit
+                # currentTargSpeed = np.linalg.norm(self.TARGET_VEL)
+                # print(f"Speeed limit: {speed_limit}, Target speed: {currentTargSpeed}")
+                # print(f"\nmax speed limit reached at {speed_limit} m/s\n")
+                
+                # self._setCommand(SpeedCommandFlag, "constant", np.sign(self.COMMANDS[1]._value) * speed_limit)
+                targ_vel_unit = self.TARGET_VEL /  np.linalg.norm(self.TARGET_VEL)
+                self.TARGET_VEL = targ_vel_unit *speed_limit
+                
+            # print(f"Target speed = {np.linalg.norm(self.TARGET_VEL)}")
+                
             
-        if np.linalg.norm(self.TARGET_VEL) > speed_limit:
-            # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
-            # self.TARGET_VEL = np.zeros(3)
-            # self.TARGET_VEL = np.clip(self.TARGET_VEL, 0, speed_limit)
-            print(": max speed limit reached -> Decelerating")
-            self._setCommand(SpeedCommandFlag, "accelerate", -0.06)
+        else:
+            self._setCommand(SpeedCommandFlag, "hover")
+            # print(f"Target Vel = {self.TARGET_VEL}")
             
     def _waypointSkipping(self, path, route_timestep, speed_limit):
         
@@ -187,14 +231,17 @@ class IFDSRoute(BaseRouting):
             c = path_vect[2]
             
             # wp_closeness_threshold = speed_limit/100  # [m]
-            wp_closeness_threshold = speed_limit/100  # [m]
+            # wp_closeness_threshold = speed_limit  # [m]
+            wp_closeness_threshold = speed_limit*self.DT  # [m]
+            # wp_closeness_threshold = np.linalg.norm(self.CUR_VEL)/5  # [m]
+            # print(f"closeness threshold = {wp_closeness_threshold}")
  
             # k[j] += 1
             
             # Check if the waypoing is ahead of current position
             if a*(self.CUR_POS[0] - Wf[0]) + b*(self.CUR_POS[1] - Wf[1]) + c*(self.CUR_POS[2]- Wf[2]) < 0:
                 self.TARGET_POS = Wf   # Wi or Wf??
-                # print("Agent " + str(j+1) + ": targeting WP #" + str(k[j]))
+                # print(f": targeting WP # {k}")
                 if np.linalg.norm(self.CUR_POS.reshape(3,1) - Wf.reshape(3,1)) <= wp_closeness_threshold: 
                     k += 1
                 else:
@@ -258,24 +305,26 @@ class IFDSRoute(BaseRouting):
             (X, Y, Z) = loc
             (xd, yd, zd) = target_pos
             
-            dist = np.linalg.norm(loc - target_pos)
+            dist = np.linalg.norm(loc.reshape(3,1) - target_pos.reshape(3,1))
 
             u = -np.array([[v*(X - xd)/dist],
                            [v*(Y - yd)/dist],
                            [v*(Z - zd)/dist]])
             # Pre-allocation
             Mm = np.zeros((3,3))
-            sum_w = 0;
+            sum_w = 0
             
             if len(Obj) != 0:
                 # print("DETECTED " + str(len(Obj)) + " OBSTACLES!")
                 for j in range(len(Obj)):
                     # Reading Gamma for each obstacle
                     Gamma = Obj[j]['Gamma']
+                    # if Gamma<1:
+                    #     continue
                     # Unit normal and tangential vector
                     n = Obj[j]['n']
                     t = Obj[j]['t']
-                    dist_obs = np.linalg.norm(loc - Obj[j]['origin'])
+                    dist_obs = np.linalg.norm(loc.reshape(3,1) - Obj[j]['origin'].reshape(3,1))
                     ntu = np.dot(np.transpose(n), u)
                     if ntu < 0 or self.SF_IFDS == 1:
                         rho   = rho0   * math.exp(1 - 1/(dist_obs * dist))
@@ -287,7 +336,9 @@ class IFDSRoute(BaseRouting):
                     elif ntu >= 0 and self.SF_IFDS == 0:
                         M = np.identity(3)
                     else:
+                        # raise ValueError("[Error] in _CalcUBar in IFDSRoute")
                         print("error in _CalcUBar")
+                        M = np.identity(3)
                         # UBar = u
                         
                     # Calculate Weight
@@ -301,6 +352,9 @@ class IFDSRoute(BaseRouting):
                 for j in range(len(Obj)):
                     w_tilde = Obj[j]["w"]/sum_w
                     Mm = Mm + w_tilde*Obj[j]["M"] 
+                    # if Obj[j]['Gamma'] >= 1 :
+                    #     w_tilde = Obj[j]["w"]/sum_w
+                    #     Mm = Mm + w_tilde*Obj[j]["M"] 
                 
                 UBar = np.dot(Mm, u)
                 return UBar
@@ -349,19 +403,31 @@ class IFDSRoute(BaseRouting):
                 flagReturn, flagBreak, foundPath, wp = _Loop(wp, t)
                 if flagBreak:
                     break
-        else:
-            # Mode 2: Simulate by reaching distance
-            t = 0
-            while True:
-                flagReturn, flagBreak, foundPath, wp = _Loop(wp, t)
-                if flagBreak:
-                    break
-                t += 1
-            
-        wp = wp[:, 0:t]
-        Path = np.delete(wp, np.s_[t+1:len(wp)], axis=1)
+        elif self.SIM_MODE == 2:
+            # Mode 2: Simulate by reaching distance (for global path)
+            if self.route_counter == 1 or self.GLOBAL_PATH.size == 0:
+                # Calculate global path
+                t = 0
+                while True:
+                    flagReturn, flagBreak, foundPath, wp = _Loop(wp, t)
+                    if flagBreak:
+                        break
+                    t += 1
+            else:
+                # Use global path
+                self.STAT[0] = RouteStatus.GLOBAL
+                flagReturn = 1
+                flagBreak = 1
+                foundPath = 2
+        
+        
         if foundPath == 2:
             Path = self.GLOBAL_PATH
+        else:
+            wp = wp[:, 0:t]
+            Path = np.delete(wp, np.s_[t+1:len(wp)], axis=1)
+            if self.route_counter == 1:
+                self.setGlobalRoute(Path)
             # print("Using Global Route")
         return (foundPath, Path)      
         
@@ -384,10 +450,10 @@ class IFDSRoute(BaseRouting):
         Obj = []
         
         (X, Y, Z) = cur_pos
-        def Shape(isDynamic, shape, x0, y0, z0, D, h=0):
+        def Shape(isDynamic, shape, x0, y0, z0, D, h=0.5):
             def CalcGamma():
                 Gamma = ((X - x0)/a)**(2*p) + ((Y - y0)/b)**(2*q) + ((Z - z0)/c)**(2*r)
-                return Gamma
+                return np.float64(Gamma)
             def CalcDg():
                 dGdx = (2*p*((X - x0)/a)**(2*p - 1))/a
                 dGdy = (2*q*((Y - y0)/b)**(2*q - 1))/b
@@ -403,11 +469,22 @@ class IFDSRoute(BaseRouting):
             elif shape == "cone":
                 (a, b, c) = (D/2, D/2, h)
                 (p, q, r) = (1, 1, 0.5)
+            elif shape == "cube":
+                (a, b, c) = (D/2, D/2, D/2)
+                (p, q, r) = (2, 2, 2)
             
             Gamma = CalcGamma()
             (dGdx, dGdy, dGdz) = CalcDg()
-            n = np.array([[dGdx], [dGdy], [dGdz]])
-            t = np.array([[dGdy],[-dGdx], [0]])
+            n = np.array([[dGdx], [dGdy], [dGdz]], dtype=np.float64)
+
+            rot = np.array([
+                [dGdy,  dGdx*dGdz, dGdx],
+                [-dGdx, dGdy*dGdz, dGdy],
+                [0, -(dGdx**2)-(dGdy**2), dGdz]], dtype=np.float64)
+            
+            tprime = np.array([[np.cos(self.ALPHA)], [np.sin(self.ALPHA)], [0]], dtype=np.float64)
+            t = np.matmul(rot,tprime)
+            # t = np.array([[dGdy],[-dGdx], [0]])
             origin = np.array([x0, y0, z0])
             # Add a new object to the list
             dType = "Dynamic" if isDynamic else "Static"
@@ -416,7 +493,10 @@ class IFDSRoute(BaseRouting):
         numObj = obstacles_pos.shape[0]
 
         for j in range(numObj):
-            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
+            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
+            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
+            # Shape(0, "cylinder",obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2],1,0.5)
+            # Shape(0, "cylinder", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
     
         return Obj
  

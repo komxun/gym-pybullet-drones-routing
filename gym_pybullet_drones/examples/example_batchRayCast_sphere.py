@@ -22,14 +22,14 @@ rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 1024
+numRays = 24
 
-rayLen = 5
+rayLen = 2
 
 rayHitColor = [1, 0, 0]
 rayMissColor = [0, 1, 0]
 
-replaceLines = True
+replaceLines = False
 
 # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
 indices = np.arange(0, numRays, dtype=float) + 0.5
@@ -38,7 +38,7 @@ indices = np.arange(0, numRays, dtype=float) + 0.5
 phi = np.arccos(1 - 2*indices/numRays)
 theta = np.pi * (1 + 5**0.5) * indices
 
-x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
+x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi)
 rayFrom = [[0,0,1] for _ in range(numRays)]
 rayTo = [[x[i], y[i], z[i]] for i in range(numRays)]
 rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor,lifeTime=0.01) for i in range(numRays)]
@@ -67,10 +67,10 @@ for i in range(numSteps):
 
       if (hitObjectUid < 0):
         hitPosition = [0, 0, 0]
-        p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i])
+        p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor)
       else:
         hitPosition = results[i][3]
-        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
+        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor)
 
   #time.sleep(1./240.)
 kuy = [results[x] for x in range(len(results)) if results[x][0]  != -1]

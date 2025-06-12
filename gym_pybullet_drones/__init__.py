@@ -40,6 +40,10 @@ register(
     entry_point='gym_pybullet_drones.envs.single_agent_rl:AutoroutingAviary',
 )
 
+register(
+    id='autorouting-mas-aviary-v0',
+    entry_point='gym_pybullet_drones.envs.multi_agent_rl:AutoroutingMASAviary',
+)
 # -----------------------------------------------------
 
 register(

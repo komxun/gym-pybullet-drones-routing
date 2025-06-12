@@ -32,12 +32,19 @@ rayHitColor = [1, 0, 0]
 rayMissColor = [0, 1, 0]
 
 replaceLines = True
+blindspot_angle_deg = 60 # Angle of blind spot behind the vehicle (0 = no blind spot)
+ray_swept_angle_deg = 90-blindspot_angle_deg/2  
+start_angle = -(ray_swept_angle_deg) * math.pi/180  
+end_angle =  (180 + ray_swept_angle_deg) * math.pi/180 
+angle_range = end_angle - start_angle
 
 for i in range(numRays):
+  angle = start_angle + angle_range * i / (numRays - 1)
   rayFrom.append([0, 0, 1])
   rayTo.append([
-      rayLen * math.sin(2. * math.pi * float(i) / numRays),
-      rayLen * math.cos(2. * math.pi * float(i) / numRays), 1
+      rayLen * math.cos(angle),
+      rayLen * math.sin(angle),
+      1
   ])
   if (replaceLines):
     rayIds.append(p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor))

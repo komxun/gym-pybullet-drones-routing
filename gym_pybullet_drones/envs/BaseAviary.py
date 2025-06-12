@@ -80,6 +80,8 @@ class BaseAviary(gym.Env):
         self.DEG2RAD = np.pi/180
         self.SIM_FREQ = freq
         self.TIMESTEP = 1./self.SIM_FREQ
+        self.CTRL_FREQ = freq
+        self.CTRL_TIMESTEP = 1. / self.CTRL_FREQ
         self.AGGR_PHY_STEPS = aggregate_phy_steps
         #### Parameters ############################################
         self.NUM_DRONES = num_drones

@@ -30,31 +30,21 @@ import matplotlib.pyplot as plt
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
-from gym.spaces import Box, Dict
+from gym.spaces import Box, Dict, Discrete
 import torch
 import torch.nn as nn
 from ray.rllib.models.torch.fcnet import FullyConnectedNetwork
 import ray
 from ray import tune
-from ray.tune.logger import DEFAULT_LOGGERS
 from ray.tune import register_env
-from ray.rllib.agents import ppo
-from ray.rllib.agents.ppo import PPOTrainer, PPOTFPolicy
-from ray.rllib.examples.policy.random_policy import RandomPolicy
-from ray.rllib.utils.test_utils import check_learning_achieved
+from ray.rllib.agents import ppo, sac
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models import ModelCatalog
 from ray.rllib.policy.sample_batch import SampleBatch
-from ray.rllib.env.multi_agent_env import ENV_STATE
-
-from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from gym_pybullet_drones.envs.multi_agent_rl.FlockAviary import FlockAviary
-from gym_pybullet_drones.envs.multi_agent_rl.LeaderFollowerAviary import LeaderFollowerAviary
 from gym_pybullet_drones.envs.multi_agent_rl.AutoroutingMASAviary import AutoroutingMASAviary
-from gym_pybullet_drones.envs.multi_agent_rl.MeetupAviary import MeetupAviary
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
-from gym_pybullet_drones.utils.Logger import Logger
+
 
 import shared_constants
 
@@ -83,6 +73,7 @@ class CustomTorchCentralizedCriticModel(TorchModelV2, nn.Module):
     def __init__(self, obs_space, action_space, num_outputs, model_config, name):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
         nn.Module.__init__(self)
+        # Action model gets only own_obs
         self.action_model = FullyConnectedNetwork(
                                                   Box(low=-1, high=1, shape=(OWN_OBS_VEC_SIZE, )), 
                                                   action_space,
@@ -90,6 +81,7 @@ class CustomTorchCentralizedCriticModel(TorchModelV2, nn.Module):
                                                   model_config,
                                                   name + "_action"
                                                   )
+        # Value model gets full obs (own + opponent), including opponent action
         self.value_model = FullyConnectedNetwork(
                                                  obs_space, 
                                                  action_space,
@@ -112,13 +104,16 @@ class FillInActions(DefaultCallbacks):
     def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch, original_batches, **kwargs):
         to_update = postprocessed_batch[SampleBatch.CUR_OBS]
         other_id = 1 if agent_id == 0 else 0
+  
         action_encoder = ModelCatalog.get_preprocessor_for_space( 
                                                                  # Box(-np.inf, np.inf, (ACTION_VEC_SIZE,), np.float32) # Unbounded
-                                                                 Box(-1, 1, (ACTION_VEC_SIZE,), np.float32) # Bounded
+                                                                #  Box(0, 10, (ACTION_VEC_SIZE,), np.int16) # Bounded
+                                                                Box(0, 2, (ACTION_VEC_SIZE,), np.int16)
                                                                  )
+      
         _, opponent_batch = original_batches[other_id]
-        # opponent_actions = np.array([action_encoder.transform(a) for a in opponent_batch[SampleBatch.ACTIONS]]) # Unbounded
-        opponent_actions = np.array([action_encoder.transform(np.clip(a, -1, 1)) for a in opponent_batch[SampleBatch.ACTIONS]]) # Bounded
+        opponent_actions = np.array([action_encoder.transform(a) for a in opponent_batch[SampleBatch.ACTIONS]]) # Unbounded
+        # opponent_actions = np.array([action_encoder.transform(np.clip(a, -1, 1)) for a in opponent_batch[SampleBatch.ACTIONS]]) # Bounded
         to_update[:, -ACTION_VEC_SIZE:] = opponent_actions
 
 ############################################################
@@ -143,11 +138,11 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
     parser.add_argument('--num_drones',  default=2,                 type=int,                                                                 help='Number of drones (default: 2)', metavar='')
-    parser.add_argument('--env',         default='leaderfollower',  type=str,             choices=['leaderfollower', 'flock', 'meetup'],      help='Task (default: leaderfollower)', metavar='')
+    parser.add_argument('--env',         default='autorouting-mas-aviary-v0',  type=str,             choices=['leaderfollower', 'flock', 'meetup'],      help='Task (default: leaderfollower)', metavar='')
     parser.add_argument('--obs',         default='kin',             type=ObservationType,                                                     help='Observation space (default: kin)', metavar='')
-    parser.add_argument('--act',         default='one_d_rpm',       type=ActionType,                                                          help='Action space (default: one_d_rpm)', metavar='')
+    parser.add_argument('--act',         default='autorouting',       type=ActionType,                                                          help='Action space (default: one_d_rpm)', metavar='')
     parser.add_argument('--algo',        default='cc',              type=str,             choices=['cc'],                                     help='MARL approach (default: cc)', metavar='')
-    parser.add_argument('--workers',     default=0,                 type=int,                                                                 help='Number of RLlib workers (default: 0)', metavar='')        
+    parser.add_argument('--workers',     default=7,                 type=int,                                                                 help='Number of RLlib workers (default: 0)', metavar='')        
     ARGS = parser.parse_args()
 
     #### Save directory ########################################
@@ -163,14 +158,17 @@ if __name__ == "__main__":
 
     #### Constants, and errors #################################
     if ARGS.obs==ObservationType.KIN:
-        OWN_OBS_VEC_SIZE = 12
+        # OWN_OBS_VEC_SIZE = 12
+        OWN_OBS_VEC_SIZE = 127  # Observe only 6 states of kinematic info + d2destin + rays info
+        # OWN_OBS_VEC_SIZE = 133 # 24 rays
+        # OWN_OBS_VEC_SIZE = 513  # 100 Rays
     elif ARGS.obs==ObservationType.RGB:
         print("[ERROR] ObservationType.RGB for multi-agent systems not yet implemented")
         exit()
     else:
         print("[ERROR] unknown ObservationType")
         exit()
-    if ARGS.act in [ActionType.ONE_D_RPM, ActionType.ONE_D_DYN, ActionType.ONE_D_PID]:
+    if ARGS.act in [ActionType.ONE_D_RPM, ActionType.ONE_D_DYN, ActionType.ONE_D_PID, ActionType.AUTOROUTING]:
         ACTION_VEC_SIZE = 1
     elif ARGS.act in [ActionType.RPM, ActionType.DYN, ActionType.VEL]:
         ACTION_VEC_SIZE = 4
@@ -191,59 +189,29 @@ if __name__ == "__main__":
     ModelCatalog.register_custom_model("cc_model", CustomTorchCentralizedCriticModel)
 
     #### Register the environment ##############################
-    temp_env_name = "this-aviary-v0"
-    if ARGS.env == 'flock':
-        register_env(temp_env_name, lambda _: FlockAviary(num_drones=ARGS.num_drones,
-                                                          aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                                          obs=ARGS.obs,
-                                                          act=ARGS.act
-                                                          )
-                     )
-    elif ARGS.env == 'leaderfollower':
-        register_env(temp_env_name, lambda _: LeaderFollowerAviary(num_drones=ARGS.num_drones,
-                                                                   aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                                                   obs=ARGS.obs,
-                                                                   act=ARGS.act
-                                                                   )
-                     )
-    elif ARGS.env == 'meetup':
-        register_env(temp_env_name, lambda _: MeetupAviary(num_drones=ARGS.num_drones,
-                                                           aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                                           obs=ARGS.obs,
-                                                           act=ARGS.act
-                                                           )
-                     )
-    else:
-        print("[ERROR] environment not yet implemented")
-        exit()
+    temp_env_name = "autorouting-mas-aviary-v0"
 
+    register_env(temp_env_name, lambda _: AutoroutingMASAviary(num_drones=ARGS.num_drones,
+                                                               freq = 120,
+                                                                aggregate_phy_steps=1,
+                                                                obs=ARGS.obs,
+                                                                act=ARGS.act
+                                                                )
+                    )
     #### Unused env to extract the act and obs spaces ##########
-    if ARGS.env == 'flock':
-        temp_env = FlockAviary(num_drones=ARGS.num_drones,
-                               aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                               obs=ARGS.obs,
-                               act=ARGS.act
-                               )
-    elif ARGS.env == 'leaderfollower':
-        temp_env = LeaderFollowerAviary(num_drones=ARGS.num_drones,
-                                        aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                        obs=ARGS.obs,
-                                        act=ARGS.act
-                                        )
-    elif ARGS.env == 'meetup':
-        temp_env = MeetupAviary(num_drones=ARGS.num_drones,
-                                aggregate_phy_steps=shared_constants.AGGR_PHY_STEPS,
-                                obs=ARGS.obs,
-                                act=ARGS.act
-                                )
-    else:
-        print("[ERROR] environment not yet implemented")
-        exit()
+    temp_env = AutoroutingMASAviary(num_drones=ARGS.num_drones,
+                                    freq = 120,
+                                    aggregate_phy_steps=1,
+                                    obs=ARGS.obs,
+                                    act=ARGS.act
+                                    )
+
     observer_space = Dict({
         "own_obs": temp_env.observation_space[0],
         "opponent_obs": temp_env.observation_space[0],
         "opponent_action": temp_env.action_space[0],
     })
+
     action_space = temp_env.action_space[0]
 
     #### Note ##################################################
@@ -254,51 +222,72 @@ if __name__ == "__main__":
     # you can defer environment initialization until ``reset()`` is called
 
     #### Set up the trainer's config ###########################
-    config = ppo.DEFAULT_CONFIG.copy() # For the default config, see github.com/ray-project/ray/blob/master/rllib/agents/trainer.py
+    config = sac.DEFAULT_CONFIG.copy() # For the default config, see github.com/ray-project/ray/blob/master/rllib/agents/trainer.py
     config = {
         "env": temp_env_name,
-        "num_workers": 0 + ARGS.workers,
+        "num_workers": 0 + ARGS.workers, # How many environment workers that parellely collect samples from their own environment clone(s)
         "num_gpus": int(os.environ.get("RLLIB_NUM_GPUS", "0")), # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0
-        "batch_mode": "complete_episodes",
+        "batch_mode": "complete_episodes",  # complete_episodes or truncate_episodes
         "callbacks": FillInActions,
         "framework": "torch",
+        # New from Komsun
+        # "entropy_coeff": 0.01,  # Try 0.01 or even 0.05 to encourage randomness
+        # "train_batch_size": 20000,
     }
 
-    #### Set up the model parameters of the trainer's config ###
-    config["model"] = { 
-        "custom_model": "cc_model",
-    }
     
+
+    #### Set up the model parameters of the trainer's config ###
+    # config["model"] = { 
+    #     "custom_model": "cc_model",
+    # }
+    # config["model"] = { 
+    #     "custom_model": "cc_model",
+    # }
     #### Set up the multiagent params of the trainer's config ##
+    # checkout https://docs.ray.io/en/releases-2.0.0/rllib/rllib-env.html
     config["multiagent"] = { 
         "policies": {
-            "pol0": (None, observer_space, action_space, {"agent_id": 0,}),
+            "pol0": (None, observer_space, action_space, {"agent_id": 0,}), # policy_class = None, observation_space, action_space
             "pol1": (None, observer_space, action_space, {"agent_id": 1,}),
         },
         "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1", # # Function mapping agent ids to policy ids
         "observation_fn": central_critic_observer, # See rllib/evaluation/observation_function.py for more info
     }
 
+    #--Komsun : Customizing Exploration Behaviour ----
+    # config["batch_mode"] = {"trucate_episodes"}
+    # config["gamma"] = 0.9
+
     #### Ray Tune stopping conditions ##########################
     stop = {
-        "timesteps_total": 120000, # 100000 ~= 10'
-        # "episode_reward_mean": 0,
+        "timesteps_total":int(2e6),  # number of totoal time steps (should exceed 200k) good: 24M (20*120000)
+        # "timesteps_total": 120000, # 100000 ~= 10'
+        # "episode_reward_mean": 100,
         # "training_iteration": 0,
     }
 
     #### Train #################################################
+    
     results = tune.run(
-        "PPO",
+        "SAC",
         stop=stop,
         config=config,
         verbose=True,
         checkpoint_at_end=True,
         local_dir=filename,
     )
+
+    # print("Best config: ", results.get_best_config(metric="mean_loss", mode="min"))
+    print("Timesteps so far:", results.trials[0].last_result["timesteps_total"])
+    
+
     # check_learning_achieved(results, 1.0)
 
     #### Save agent ############################################
-    checkpoints = results.get_trial_checkpoints_paths(trial=results.get_best_trial('episode_reward_mean',mode='max'),
+    checkpoints = results.get_trial_checkpoints_paths(trial=results.get_best_trial('episode_reward_mean',
+                                                                                   mode='max'
+                                                                                   ),
                                                       metric='episode_reward_mean'
                                                       )
     with open(filename+'/checkpoint.txt', 'w+') as f:

@@ -1,12 +1,12 @@
 import os
-import math
-from enum import Enum
 import numpy as np
-import pybullet as p
 import xml.etree.ElementTree as etxml
+import pkg_resources
+from enum import Enum
+import pybullet as p
 
-from gym_pybullet_drones.envs.BaseAviary import DroneModel, BaseAviary
 
+from gym_pybullet_drones.utils.enums import DroneModel
 
 class RouteStatus(Enum):
     GLOBAL = "global route"
@@ -49,9 +49,9 @@ class Commander:
                 return member
         raise CommandValueError(f"Invalid command '{command_str}' for the command type {commandType}")
 
-    
+
 class BaseRouting(object):
-    """Base class for routing.
+    """Base class for control.
 
     Implements `__init__()`, `reset(), and interface `computeRouteFromState()`,
     the main method `computeRoute()` should be implemented by its subclasses.
@@ -62,160 +62,56 @@ class BaseRouting(object):
 
     def __init__(self,
                  drone_model: DroneModel,
+                 drone_id,
                  g: float=9.8
                  ):
-        """Common routing classes __init__ method.
+        """Common Routing classes __init__ method.
 
         Parameters
         ----------
         drone_model : DroneModel
-            The type of drone to generate route (detailed in an .urdf file in folder `assets`).
+            The type of drone to control (detailed in an .urdf file in folder `assets`).
         g : float, optional
             The gravitational acceleration in m/s^2.
 
         """
         #### Set general use constants #############################
         self.DRONE_MODEL = drone_model
+        self.DRONE_ID = drone_id
         """DroneModel: The type of drone to control."""
         self.GRAVITY = g*self._getURDFParameter('m')
         """float: The gravitational force (M*g) acting on each drone."""
-        self.KF = self._getURDFParameter('kf')
-        """float: The coefficient converting RPMs into thrust."""
-        self.KM = self._getURDFParameter('km')
-        """float: The coefficient converting RPMs into torque."""
         self.GLOBAL_PATH = np.array([])
         """ndarray (3,N) : The global static route of UAV from starting to destination"""
-        
-        self.SPEED_STAT = "Dummy"
         self.CUR_POS = np.array([0,0,0])
         self.CUR_VEL = np.array([0,0,0])
+        self.CUR_RPY = np.array([0,0,0])
         self.DESTINATION = np.array([0,0,0])
         self.TARGET_POS   = np.array([])   # Check-> initialize with empty array should work
         self.TARGET_VEL  =  np.array([0,0,0])
-        self.HOME = np.array([0,0,0])
+        self.HOME_POS = np.array([0,0,0])
         self.STAT = [RouteStatus.GLOBAL, SpeedStatus.CONSTANT]
-        # self.COMMAND = [RouteCommandFlag.NONE, SpeedCommandFlag.NONE]
-        # self.COMMAND_ROUTE = Commander(RouteCommandFlag, "none")
-        # self.COMMAND_SPEED = Commander(SpeedCommandFlag, "constant", 0)
+        
         self.COMMANDS = [Commander(RouteCommandFlag, "none"), Commander(SpeedCommandFlag, "none")]
         self.SIM_MODE = 2
+        self.PATH_OPTION = 1
         self._resetAllCommands()
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
         self.DETECTED_OBS_DATA = {}
-        self.reset()
 
-    ################################################################################
+        self.NUM_RAYS = 24
+        # self.NUM_RAYS = 200
+        # self.NUM_RAYS = 100
+        # self.NUM_RAYS = 8
+        self.RAY_LEN_M = 1.5
+        # self.RAY_LEN_M = 1
+        # self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
+
+        # Tracks consecutive static actions (used in reward function)
+        self.static_action_counter = 0
         
-    def _setCommand(self, commandType, command_str, value=None):
-        def _parse_command(command_str, commandType):
-            for member in commandType:
-                if member.value == command_str:
-                    return member
-            raise CommandValueError(f"Invalid command '{command_str}' for the command type {commandType}")
-            
-        classList = [RouteCommandFlag, SpeedCommandFlag]
-        
-        if commandType not in classList:
-            raise CommandTypeError("Invalid command type")
-        elif commandType == RouteCommandFlag:
-            idx = 0
-        elif commandType == SpeedCommandFlag:
-            idx = 1
-        
-        # Update the COMMANDS attribute    
-        self.COMMANDS[idx] = Commander(commandType, command_str, value)
-        self._processCommand()
-        
-    ################################################################################
-    
-    def _processCommand(self):
-        """Process the command and reset"""
-        
-        # First command position: route command
-        if self.COMMANDS[0]._name != 'none':
-            self._processRouteCommand()
-            
-        if self.COMMANDS[1]._name != 'none':
-            self._processSpeedCommand()
-                
-    
-    def _processRouteCommand(self):
-        if self.COMMANDS[0]._name == RouteCommandFlag.CHANGE.value:
-            self.switchRoute()
-        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_GLOBAL.value:
-            self.STAT[0] = RouteStatus.GLOBAL
-            self.SIM_MODE = 2
-        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
-            self.STAT[0] = RouteStatus.LOCAL
-            self.SIM_MODE = 1
-        else:
-            print("[Error] in _processRouteCommand()")
-            
-        # Reset the route command
-        # self._resetRouteCommand()
-            
-    def _processSpeedCommand(self):
-        if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
-            # accelerate
-            if self.COMMANDS[1]._value > 0:
-                # print("Accelerating . . .")
-                self.STAT[1] = SpeedStatus.ACCELERATE
-            elif self.COMMANDS[1]._value < 0:
-                # print("Decelerating . . .")
-                self.STAT[1] = SpeedStatus.DECELERATE
-            elif self.COMMANDS[1]._value == 0:
-                # print("Constant Speed . . .")
-                self.STAT[1] = SpeedStatus.CONSTANT
-                self.TARGET_VEL = np.zeros(3)
-            
-        elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
-            # print("Constant Speed . . .")
-            self.TARGET_VEL = np.zeros(3)
-            
-        elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
-            # hover
-            if self.STAT[1] != SpeedStatus.HOVERING:
-                # print("*Activate Hovering Mode!")
-                self.TARGET_POS = self.CUR_POS
-                self.TARGET_VEL = np.zeros(3)
-                self.STAT[1] = SpeedStatus.HOVERING
-        else:
-            print("[Error] in _processSpeedCommand()")
-        
-        # Reset the speed command
-        # self._resetSpeedCommand() 
-                
-    def switchRoute(self):
-        """Switch current route from global to local, or from local to global"""
-        if self.STAT[0].value == RouteStatus.GLOBAL.value:
-            # print("Switching to Local route")
-            # self.STAT[0] = RouteStatus.LOCAL
-            # self.SIM_MODE = 1
-            
-            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_LOCAL.value
-            self._processRouteCommand()
-        
-        elif self.STAT[0].value == RouteStatus.LOCAL.value:
-            # print("Switching to Global route")
-            # self.STAT[0] = RouteStatus.GLOBAL
-            # self.SIM_MODE =2
-            
-            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_GLOBAL.value
-            self._processRouteCommand()
-             
-        else:
-            print("[Error] in switchRoute()")
-        
-    def _resetAllCommands(self):
-        self._resetRouteCommand()
-        self._resetSpeedCommand()
-        
-    def _resetRouteCommand(self):
-        self.COMMANDS[0] = Commander(RouteCommandFlag, "none")
-    
-    def _resetSpeedCommand(self):
-        self.COMMANDS[1] = Commander(RouteCommandFlag, "none")
+        self.reset()
 
     ################################################################################
 
@@ -225,106 +121,9 @@ class BaseRouting(object):
         A general use counter is set to zero.
 
         """
-        # self.route_counter = 0
-
-    ################################################################################
-
-    def setGlobalRoute(self, route):
-        """Store global route
-        Parmaters
-        ---------
-        route : ndarray
-            (3,N)-shaped array of floats containing the global route
-        """
-        self.GLOBAL_PATH = route
-        # print("Setting a global route")
-    
-    ################################################################################
-    
-    def _updateCurPos(self, pos):
-        self.CUR_POS = pos
-        
-    def _updateCurVel(self, vel):
-        self.CUR_VEL = vel
-        
-    def _batchRayCast(self):
-        """
-        Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
-        detected obstacle's id
-
-        Returns:
-            None.
-
-        """
-        # rayFrom = self.CUR_POS
-        # p.removeAllUserDebugItems()
-        detected_obs_ids = []
-        rayTo = []
-        rayIds = []
-        # numRays = 1024
-        numRays = 500
-        # numRays = 250
-        rayLen = 1.5
-        # rayLen = 4
-        rayHitColor = [1, 0, 0]
-        rayMissColor = [0, 1, 0]
-
-        replaceLines = True
-
-        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
-        indices = np.arange(0, numRays, dtype=float) + 0.5
-
-
-        phi = np.arccos(1 - 2*indices/numRays)
-        theta = np.pi * (1 + 5**0.5) * indices
-
-        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi);
-        rayFrom = [self.CUR_POS for _ in range(numRays)]
-        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
-        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
-        results = p.rayTestBatch(rayFrom, rayTo)
-        
-        for i in range(numRays):
-            hitObjectUid = results[i][0]
-            
-            if (hitObjectUid < 0):
-                hitPosition = [0, 0, 0]
-                # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
-            else:
-                if hitObjectUid!=0:
-                    detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
-                    hitPosition = results[i][3]
-                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
-                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lifeTime=0.1)
-    
-        self.DETECTED_OBS_IDS = detected_obs_ids
-
-    ################################################################################
-    
-    def _processDetection(self, obstacle_data):
-        """
-        Screen obstacle_data based on the detection from self.DETECTED_OBS_IDS. 
-
-        Args:
-            obstacle_data (dict): dictionary of dictionary of obstacles data where
-                key is the obstacle's id and values include 'position' and 'size'.
-
-        Returns:
-            None.
-
-        """
-        if len(self.DETECTED_OBS_IDS) != 0:
-            tempObs = []
-            for j in self.DETECTED_OBS_IDS:
-                self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
-                                                      "size": obstacle_data[str(j)]["size"]}
-                tempObs.append(obstacle_data[str(j)]["position"])
-        else:
-            self.DETECTED_OBS_DATA = {}
-            
-        
-        
-        
+        self.static_action_counter = 0
+        self.GLOBAL_PATH = np.array([])
+        self.route_counter = 0
 
     ################################################################################
 
@@ -334,7 +133,8 @@ class BaseRouting(object):
                             home_pos,
                             target_pos,
                             speed_limit,
-                            obstacle_data=None
+                            obstacle_data=None,
+                            drone_ids = np.array([1])
                             ):
         """Interface method using `computeRoute`.
 
@@ -354,21 +154,22 @@ class BaseRouting(object):
         obstacles_size : ndarray
             (N,3)-shaped array of floats containing obstacles' sizes. The first one is environment
         """
-        self.HOME= home_pos
+        self.HOME_POS= home_pos
         self.DESTINATION = target_pos
         
         self._processDetection(obstacle_data)
         
-        
         return self.computeRoute(route_timestep=route_timestep,
                                    cur_pos=state[0:3],
                                    cur_quat=state[3:7],
+                                   cur_rpy_rad=state[7:10],
                                    cur_vel=state[10:13],
                                    cur_ang_vel=state[13:16],
-                                   home_pos = np.array((0,0,0)),
+                                   home_pos = home_pos,
                                    target_pos=target_pos,
                                    speed_limit = speed_limit,
-                                   obstacle_data = self.DETECTED_OBS_DATA
+                                   obstacle_data = self.DETECTED_OBS_DATA,
+                                   drone_ids = drone_ids
                                    )
 
     ################################################################################
@@ -377,12 +178,14 @@ class BaseRouting(object):
                      route_timestep,
                      cur_pos,
                      cur_quat,
+                     cur_rpy_rad,
                      cur_vel,
                      cur_ang_vel,
                      home_pos,
                      target_pos,
                      speed_limit,
-                     obstacle_data=None
+                     obstacle_data,
+                     drone_ids
                      ):
         """Abstract method to compute the route for a single drone.
 
@@ -406,12 +209,27 @@ class BaseRouting(object):
         """
         raise NotImplementedError
 
+################################################################################
+################################################################################
+    
+    def getDistanceToDestin(self):
+        cur_pos = self.CUR_POS.reshape(1,3)
+        destin = self.DESTINATION.reshape(1,3)
+        return np.linalg.norm(cur_pos - destin)
+
     ################################################################################
 
     def _plotRoute(self, path):
-        pathColor = [0, 0, 1]
-        for i in range(0, path.shape[1]-1, 1):
-            p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5, lifeTime=0.1)
+        if self.DRONE_ID==0:
+            pathColor = [0, 0, 1]
+        else:
+            pathColor = [0.5,0.5,0.6]
+        # if self.DRONE_ID ==0:
+        #     p.removeAllUserDebugItems()
+        stepper = 1  # 1
+        for i in range(0, path.shape[1]-stepper, stepper):
+            p.addUserDebugLine(path[:,i], path[:,i+stepper], pathColor, lineWidth=5, lifeTime=0.05)
+            # p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5)
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
@@ -460,7 +278,8 @@ class BaseRouting(object):
         """
         #### Get the XML tree of the drone model to control ########
         URDF = self.DRONE_MODEL.value + ".urdf"
-        URDF_TREE = etxml.parse(os.path.dirname(os.path.abspath(__file__))+"/../assets/"+URDF).getroot()
+        path = pkg_resources.resource_filename('gym_pybullet_drones', 'assets/'+URDF)
+        URDF_TREE = etxml.parse(path).getroot()
         #### Find and return the desired parameter #################
         if parameter_name == 'm':
             return float(URDF_TREE[1][0][1].attrib['value'])
@@ -474,3 +293,330 @@ class BaseRouting(object):
         elif parameter_name == 'collision_z_offset':
             COLLISION_SHAPE_OFFSETS = [float(s) for s in URDF_TREE[1][2][0].attrib['xyz'].split(' ')]
             return COLLISION_SHAPE_OFFSETS[2]
+        
+    ################################################################################
+        
+    def _setCommand(self, commandType, command_str, value=None):
+        def _parse_command(command_str, commandType):
+            for member in commandType:
+                if member.value == command_str:
+                    return member
+            raise CommandValueError(f"Invalid command '{command_str}' for the command type {commandType}")
+            
+        classList = [RouteCommandFlag, SpeedCommandFlag]
+        
+        if commandType not in classList:
+            raise CommandTypeError("Invalid command type")
+        elif commandType == RouteCommandFlag:
+            idx = 0
+        elif commandType == SpeedCommandFlag:
+            idx = 1
+        
+        # Update the COMMANDS attribute    
+        self.COMMANDS[idx] = Commander(commandType, command_str, value)
+        self._processCommand()
+        
+    ################################################################################
+    
+    def _processCommand(self):
+        """Process the command and reset"""
+        
+        # First command position: route command
+        if self.COMMANDS[0]._name != 'none':
+            self._processRouteCommand()
+            
+        if self.COMMANDS[1]._name != 'none':
+            self._processSpeedCommand()
+        # else:
+        #     print("No SpeedCommand")
+                
+    
+    def _processRouteCommand(self):
+        if self.COMMANDS[0]._name == RouteCommandFlag.CHANGE.value:
+            self.switchRoute()
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_GLOBAL.value:
+            self.STAT[0] = RouteStatus.GLOBAL
+            self.SIM_MODE = 2
+            self.PATH_OPTION = self.COMMANDS[0]._value
+        elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+            self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            self.PATH_OPTION = self.COMMANDS[0]._value
+        else:
+            print("[Error] in _processRouteCommand()")
+            
+        # Reset the route command
+        # self._resetRouteCommand()
+            
+    def _processSpeedCommand(self):
+        if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
+            # accelerate
+            if self.COMMANDS[1]._value > 0:
+                # print("Accelerating . . .")
+                self.STAT[1] = SpeedStatus.ACCELERATE
+            elif self.COMMANDS[1]._value < 0:
+                # print("Decelerating . . .")
+                self.STAT[1] = SpeedStatus.DECELERATE
+            elif self.COMMANDS[1]._value == 0:
+                # print("Constant Speed . . .")
+                self.STAT[1] = SpeedStatus.CONSTANT
+                self.TARGET_VEL = np.zeros(3)
+            
+        elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
+            # print("Constant Speed . . .")
+            # cur_vel_unit = self.CUR_VEL /  np.linalg.norm(self.CUR_VEL)
+            # self.TARGET_VEL = cur_vel_unit *self.COMMANDS[1]._value
+            # self.TARGET_VEL = np.zeros(3)
+            self.STAT[1] = SpeedStatus.CONSTANT
+            
+        elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
+            # hover
+            if self.STAT[1] != SpeedStatus.HOVERING:
+                
+                self.TARGET_POS = self.CUR_POS
+                self.TARGET_VEL = np.zeros(3)
+                self.HOVER_POS = self.CUR_POS
+                self.STAT[1] = SpeedStatus.HOVERING
+                # print(f"\n*Activate Hovering Mode!, target pos = {self.TARGET_POS}\n")
+            else:
+                self.TARGET_POS = self.HOVER_POS
+                self.TARGET_VEL = np.zeros(3)
+                self.STAT[1] = SpeedStatus.HOVERING
+                
+                
+                # print(f"curPos: {self.CUR_POS}, targPos: {self.TARGET_POS}")
+        else:
+            print("[Error] in _processSpeedCommand()")
+        
+        # Reset the speed command (NEED)
+        # self._resetSpeedCommand() 
+                
+    def switchRoute(self):
+        """Switch current route from global to local, or from local to global"""
+        if self.STAT[0].value == RouteStatus.GLOBAL.value:
+            # print("Switching to Local route")
+            # self.STAT[0] = RouteStatus.LOCAL
+            self.SIM_MODE = 1
+            
+            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_LOCAL.value
+            self._processRouteCommand()
+        
+        elif self.STAT[0].value == RouteStatus.LOCAL.value:
+            # print("Switching to Global route")
+            # self.STAT[0] = RouteStatus.GLOBAL
+            self.SIM_MODE =2
+            
+            self.COMMANDS[0]._name = RouteCommandFlag.FOLLOW_GLOBAL.value
+            self._processRouteCommand()
+             
+        else:
+            print("[Error] in switchRoute()")
+        
+    def _resetAllCommands(self):
+        self._resetRouteCommand()
+        self._resetSpeedCommand()
+        
+    def _resetRouteCommand(self):
+        self.COMMANDS[0] = Commander(RouteCommandFlag, "none")
+    
+    def _resetSpeedCommand(self):
+        self.COMMANDS[1] = Commander(RouteCommandFlag, "none")
+
+    ################################################################################
+    def setGlobalRoute(self, route):
+        """Store global route
+        Parmaters
+        ---------
+        route : ndarray
+            (3,N)-shaped array of floats containing the global route
+        """
+        self.GLOBAL_PATH = route
+        # print("Setting a global route")
+    
+    ################################################################################
+    
+    def _updateCurPos(self, pos):
+        self.CUR_POS = pos
+        # p.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=0, cameraPitch=-30, cameraTargetPosition=pos)
+    def _updateCurRpy(self, rpy):
+        self.CUR_RPY = rpy    
+    def _updateCurVel(self, vel):
+        self.CUR_VEL = vel
+        
+    def _batchRayCast(self, drone_ids):
+        """
+        Update self.DETECTED_OBS_IDS based on batch ray casting. DETECTED_OBS_IDS is a list of 
+        detected obstacle's id
+
+        Returns:
+            None.
+
+        """
+        rayHitColor = [0, 1, 0]
+        rayMissColor = [0, 1, 0]
+        replaceLines = False
+        # rayFrom = self.CUR_POS
+        # p.removeAllUserDebugItems()
+
+        detected_obs_ids = []
+        rayTo = []
+        rayIds = []
+        rayFrom = [self.CUR_POS for _ in range(self.NUM_RAYS)]
+        
+        
+
+        # -- number of rays : check from len(results)
+        # -- results is a tuple of tuples
+        # ******** Select the Lidar shape *****************
+        # rayTo = self._RayCast_Sphere(rayFrom)
+        rayTo = self._RayCast_Circle(rayFrom)
+        results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
+        # *************************************************
+        self.RAYS_INFO = self._extractRayInfo(results)
+        
+        # if (not replaceLines):
+        # p.removeAllUserDebugItems()
+        for i in range(self.NUM_RAYS):
+            hitObjectUid = results[i][0]
+            
+            if (hitObjectUid < 0):
+                hitPosition = [float('inf'), float('inf'), float('inf')]
+                # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, lifeTime=0.02)
+            else:
+                # This case, no detection of other fellow UAVs
+                detectOtherUAV = 1
+                if detectOtherUAV:
+                    # hitCondition = hitObjectUid!=0 # ignore the floor
+                    hitCondition = hitObjectUid!=0  and hitObjectUid != self.DRONE_ID+1
+                else:
+                    # hitCondition = hitObjectUid!=0 and hitObjectUid not in drone_ids
+                    hitCondition = hitObjectUid not in drone_ids
+
+                if hitCondition:
+                # if hitObjectUid!=0:
+                    detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
+                    hitPosition = results[i][3]
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
+                    # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1)
+
+                    # if self.DRONE_ID == 0:
+                    #     if self.RAYS_INFO[i,1] < 0.2:
+                    #         rayHitColor = [1, 0, 0]
+                    #     p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
+
+                    if self.RAYS_INFO[i,1] < 0.2:
+                        rayHitColor = [1, 0, 0]
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
+    
+        self.DETECTED_OBS_IDS = detected_obs_ids
+
+    def _RayCast_Sphere(self, rayFrom):
+        numRays = self.NUM_RAYS
+        rayLen = self.RAY_LEN_M
+        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
+        indices = np.arange(0, numRays, dtype=float) + 0.5
+
+        phi = np.arccos(1 - 2*indices/numRays)
+        theta = np.pi * (1 + 5**0.5) * indices
+
+        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi)
+        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        
+        return rayTo
+    
+    def _RayCast_Circle(self, rayFrom):
+        numRays = self.NUM_RAYS
+        rayLen = self.RAY_LEN_M
+        rayTo = []
+
+        blindspot_angle_deg = 0 # Angle of blind spot behind the vehicle (0 = no blind spot)
+        ray_swept_angle_deg = 90-blindspot_angle_deg/2  
+        start_angle = -(ray_swept_angle_deg) * np.pi/180  
+        end_angle =  (180 + ray_swept_angle_deg) * np.pi/180 
+        angle_range = end_angle - start_angle
+
+        for i in range(numRays):
+            angle = start_angle + angle_range * i / (numRays - 1)
+            rayTo.append([
+                self.CUR_POS[0] + rayLen * np.cos(angle),
+                self.CUR_POS[1] + rayLen * np.sin(angle),
+                self.CUR_POS[2]
+            ])
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        return rayTo
+
+    ################################################################################
+    def _extractRayInfo(self, rayResult):
+        """
+        Extract useful infomation from batch ray-casting to feed into agent observation
+
+        Args:
+            rayResult (tuple): tuple of tuples of raytest query returned from rayTestBatch
+                The rayResult should have the dimension of 5 x (number of rays)
+
+        Returns:
+            array (5 x Number of rays, 1)
+                Extracted information consisting of [hit_ids, hit_fraction, hit_pos_x, hit_pos_y, hit_pos_z] per ray
+        """
+
+        tempList = []
+        for result in rayResult:
+            hit_ids = result[0]
+            hit_fraction = result[2]
+            hit_pos = result[3]
+            tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
+        
+        return np.array(tempList).reshape(self.NUM_RAYS, 5)
+    
+    def _processDetection(self, obstacle_data):
+        """
+        Screen obstacle_data based on the detection from self.DETECTED_OBS_IDS. 
+
+        Args:
+            obstacle_data (dict): dictionary of dictionary of obstacles data where
+                key is the obstacle's id and values include 'position' and 'size'.
+
+        Returns:
+            None.
+
+        """
+        if len(self.DETECTED_OBS_IDS) != 0:
+            tempObs = []
+            for j in self.DETECTED_OBS_IDS:
+                self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
+                                                      "size": obstacle_data[str(j)]["size"]}
+                tempObs.append(obstacle_data[str(j)]["position"])
+        else:
+            self.DETECTED_OBS_DATA = {}
+    
+    import numpy as np
+
+    def _generateWaypoints(self,home_pos, destination, num_waypoints):
+        """
+        Generate waypoints in 3D for a straight line from home_pos to destination.
+
+        Parameters:
+        - home_pos: tuple of floats (x, y, z) representing the starting position.
+        - destination: tuple of floats (x, y, z) representing the destination position.
+        - num_waypoints: integer, number of waypoints to generate along the path.
+
+        Returns:
+        - waypoints: numpy array of shape (3, num_waypoints) where each row is x, y, z coordinates.
+        """
+        # Generate an array of points from 0 to 1 with num_waypoints
+        t_values = np.linspace(0, 1, num_waypoints+2)
+
+        # Interpolate each dimension and stack as rows in a (3, num_waypoints) array
+        waypoints = np.array([
+            (1 - t_values) * home_pos[0] + t_values * destination[0],
+            (1 - t_values) * home_pos[1] + t_values * destination[1],
+            (1 - t_values) * home_pos[2] + t_values * destination[2]
+        ])
+        # Remove the first column to offset the path
+        waypoints = waypoints[:, 2:]  # Shape becomes (3, num_waypoints)
+
+        return waypoints
+
+
+
