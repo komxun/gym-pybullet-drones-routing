@@ -188,8 +188,12 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
             self.action_buffer.append(np.zeros((1,action_size)))
         num_actions_per_agent = 3
         actions_array = [num_actions_per_agent for _ in range(self.NUM_DRONES)]
-        return spaces.MultiDiscrete(actions_array)
-        # return spaces.Dict({i: spaces.Discrete(3) for i in range(self.NUM_DRONES)}) 
+        # return spaces.MultiDiscrete(actions_array)
+        return spaces.Dict({i: spaces.Discrete(3) for i in range(self.NUM_DRONES)}) 
+        # return spaces.Dict({i: spaces.Box(low=0*np.ones(action_size),
+        #                                 high=2*np.ones(action_size),
+        #                                 dtype=np.int16
+        #                                 ) for i in range(self.NUM_DRONES)})
         # 11 discrete actions, details in _preprocessAction()
     
 

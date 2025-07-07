@@ -153,7 +153,7 @@ if __name__ == "__main__":
     #--------------------Correct  Code --------------------
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.09.2025_14.27.29"
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.09.2025_15.37.11"
-    # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.09.2025_22.04.26"  #1 M Training (Almost good!)
+    file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.09.2025_22.04.26"  #1 M Training (Almost good!)
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.10.2025_12.23.50"  # 2 M Reward 11 (Bad)
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.10.2025_15.13.10"  #2 M Reward 11 new (Bad)
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.10.2025_19.10.18" # 3 M Reward 8 (not good)
@@ -161,7 +161,9 @@ if __name__ == "__main__":
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.11.2025_13.46.10"  # 2 M Reward 11 with gamma (Bad)
     # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.12.2025_08.58.16"  # 2 M Reward 8 with batch 20k
     #----------------- freq = 120, aggre = 1 ----------------
-    file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.12.2025_11.08.26"  # 2M Reward 8 with batch 20k
+    # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.12.2025_11.08.26"  # 2M Reward 8 with batch 20k
+    # file_loc = "./results/save-autorouting-mas-aviary-v0-2-cc-kin-autorouting-06.17.2025_17.50.52"   # 2M Reward 8 with batch 100k
+    # file_loc = "./results/save-autorouting-mas-aviary-v0-kin-autorouting-06.17.2025_23.10.21"
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
     parser.add_argument('--exp',    default=file_loc, type=str,       help='The experiment folder written as ./results/save-<env>-<num_drones>-<algo>-<obs>-<act>-<time_date>', metavar='')
@@ -232,6 +234,8 @@ if __name__ == "__main__":
         "batch_mode": "complete_episodes",
         "callbacks": FillInActions,
         "framework": "torch",
+        #---Komsun
+        "explore": False,
     }
 
     #### Set up the model parameters of the trainer's config ###
@@ -303,8 +307,11 @@ if __name__ == "__main__":
         while not epEnd:
 
             # print(f"policy0.obseration_space = {policy0.observation_space}")
+            # temp[0] = policy0.compute_single_action(np.hstack([action[1], obs[1], obs[0]])) # Counterintuitive order, check params.json
+            # temp[1] = policy1.compute_single_action(np.hstack([action[0], obs[0], obs[1]]))
+
             temp[0] = policy0.compute_single_action(np.hstack([action[1], obs[1], obs[0]])) # Counterintuitive order, check params.json
-            temp[1] = policy1.compute_single_action(np.hstack([action[0], obs[0], obs[1]]))
+            temp[1] = policy0.compute_single_action(np.hstack([action[0], obs[0], obs[1]]))
 
             # temp[0] = policy0.compute_single_action(np.hstack([obs[0], obs[1], action[1]])) # Counterintuitive order, check params.json
             # temp[1] = policy1.compute_single_action(np.hstack([obs[1], obs[0], action[0]]))

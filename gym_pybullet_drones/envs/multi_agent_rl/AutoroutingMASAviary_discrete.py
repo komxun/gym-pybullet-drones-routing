@@ -279,8 +279,9 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
         # Otherwise, continue based on individual goals
         done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
         # done["__all__"] = all(bool_vals)   # Done if all finish
-        done["__all__"] = True if True in done.values() else False   # Done if any finish
+        # done["__all__"] = True if True in done.values() else False   # Done if any finish
 
+        done["__all__"] = all(done.values())  # RLlib needs to know when ALL agents are done!
         # message += " END OF EPISODE <<"
         # print(message)
         # print(f"done = {done}")

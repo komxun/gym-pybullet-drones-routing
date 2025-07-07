@@ -245,10 +245,10 @@ if __name__ == "__main__":
         "framework": "torch",
         # New from Komsun
         "entropy_coeff": 0.01,  # Try 0.01 or even 0.05 to encourage randomness
-        "train_batch_size": 20000,
+        "train_batch_size": 5000,
+        "evaluation_interval": 2, # number of training iteration between evaluations
+        "evaluation_num_episodes": 20,
     }
-
-    
 
     #### Set up the model parameters of the trainer's config ###
     config["model"] = { 
@@ -261,7 +261,7 @@ if __name__ == "__main__":
             "pol0": (None, observer_space, action_space, {"agent_id": 0,}), # policy_class = None, observation_space, action_space
             "pol1": (None, observer_space, action_space, {"agent_id": 1,}),
         },
-        "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1", # # Function mapping agent ids to policy ids
+        "policy_mapping_fn": lambda agent_id: f"pol{agent_id}", # # Function mapping agent ids to policy ids
         "observation_fn": central_critic_observer, # See rllib/evaluation/observation_function.py for more info
     }
 
@@ -271,7 +271,7 @@ if __name__ == "__main__":
 
     #### Ray Tune stopping conditions ##########################
     stop = {
-        "timesteps_total":int(2e6),  # number of totoal time steps (should exceed 200k) good: 24M (20*120000)
+        "timesteps_total":int(5e6),  # number of totoal time steps (should exceed 200k) good: 24M (20*120000)
         # "timesteps_total": 120000, # 100000 ~= 10'
         # "episode_reward_mean": 100,
         # "training_iteration": 0,

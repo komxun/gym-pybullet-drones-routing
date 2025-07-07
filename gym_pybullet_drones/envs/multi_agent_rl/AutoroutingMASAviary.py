@@ -58,7 +58,7 @@ class AutoroutingMASAviary(ExtendedMultiagentAviary):
         """
         self.ACTION_BUFFER_SIZE = int(freq//2)
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
-        self.ALLOWED_WAITING_S = 5
+        self.ALLOWED_WAITING_S = 60
         self.static_action_threshold = freq * self.ALLOWED_WAITING_S
         
 
