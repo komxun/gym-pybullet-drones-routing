@@ -12,6 +12,7 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 import gymnasium as gym
+import gym
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ImageType
 
 komsunWantsPrint = False

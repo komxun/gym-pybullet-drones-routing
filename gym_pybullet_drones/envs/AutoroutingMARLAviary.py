@@ -4,8 +4,9 @@ from gym_pybullet_drones.envs.ExtendedMARLAviary import ExtendedMARLAviary
 from gym_pybullet_drones.envs.ExtendedMARLAviary2 import ExtendedMARLAviary2
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType
 from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, RouteStatus
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
-class AutoroutingMARLAviary(ExtendedMARLAviary2):
+class AutoroutingMARLAviary(ExtendedMARLAviary, MultiAgentEnv):
     """Multi agent RL problem: Multiple-routing."""
 
     ################################################################################
