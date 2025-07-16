@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from collections import deque
@@ -58,8 +59,9 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
         """
         self.ACTION_BUFFER_SIZE = int(freq//2)
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
-        self.ALLOWED_WAITING_S = 5
+        self.ALLOWED_WAITING_S = 20
         self.static_action_threshold = freq * self.ALLOWED_WAITING_S
+        
         
 
         super().__init__(drone_model=drone_model,
@@ -105,20 +107,18 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
 
         """
         
-        
-        
-        
         # norm_ep_time = (self.step_counter/self.PYB_FREQ ) / self.EPISODE_LEN_SEC
         elapsed_time_sec = self.step_counter/self.SIM_FREQ
 
         # ---------Reward design-------------
         reachThreshold_m = 0.5  #0.2
-        reward_choice = 8  # 8: best  10: 2nd best 11: Good
+        reward_choice = 11  # 8: best  10: 2nd best 11: Good
         # prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
         # d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
         # h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
         # self.CURRENT_POS = curPos
         # CHECK THIS AGAIN!!!!!!
+        # agent_dones = [f"Agent{j}" if self.DONE[j] else "------" for j in range(len(self.DONE)) ]
         for i in range(0, self.NUM_DRONES):
             rewards = {}
             state = self._getDroneStateVector(i)
@@ -127,7 +127,6 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
             d2destin = np.linalg.norm(self.routing[i].DESTINATION - state[0:3])
             h2destin = np.linalg.norm(self.routing[i].DESTINATION - self.routing[i].HOME_POS)
             self.routing[i].CUR_POS = curPos
-
             if reward_choice == 8:
                 """Positive reward design: reach destination asap"""
                 step_cost = 1*(prevd2destin - d2destin) * (1/d2destin)
@@ -171,21 +170,31 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
                 collide_reward = -10 + step_reward
                 too_close_reward = -2  + step_reward#-2 
                 destin_reward = 100*h2destin
+                if self.DONE[i]:
+                    # print(f"[Agent {i} is idling]")
+                    # print("Finished agents:", end=" ")
+                    # print(*agent_dones, sep=', ')
+                    # sys.stdout.write("\033[F") # Cursor up one line
+                    ret = 0
+                else:       
+                    
+                    # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+                    # # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+                    #     ret = step_reward/4
+                    if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m and not self.DONE[i]:
+                        ret = destin_reward
+                        print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
+                        self.DONE[i] = True
+                    elif int(self.CONTACT_FLAGS[i]) == 1:
+                        ret = collide_reward
+                        print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
+                    
+                    elif any(self.routing[i].RAYS_INFO[:,1]<0.2):
+                        print(f"!! Agent {i}: NMAC")
+                        ret = too_close_reward
+                    else:
+                        ret = step_reward
 
-                ret = step_reward
-                # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
-                # # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
-                #     ret = step_reward/4
-                if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m:
-                    ret = destin_reward
-                    print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
-
-                elif int(self.CONTACT_FLAGS[i]) == 1:
-                    ret = collide_reward
-                    print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
-                
-                elif any(self.routing[i].RAYS_INFO[:,1]<0.1):
-                    ret = too_close_reward
             elif reward_choice == 20:
                 max_distance = h2destin
                 if d2destin < reachThreshold_m:
@@ -220,6 +229,7 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
                         
             rewards[i] = ret
         # print(f"--> Reward = {rewards}")
+        
         return rewards
     ################################################################################
     
@@ -240,51 +250,48 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
         
         # Check for any collisions
         collision_occurred = any(int(self.CONTACT_FLAGS[j]) == 1 for j in range(self.NUM_DRONES))
-        
-        for j in range(self.NUM_DRONES):
-            state = self._getDroneStateVector(j)
-            curPos = np.array(state[0:3])
-            prevd2destin = np.linalg.norm(self.routing[j].DESTINATION - self.routing[j].CUR_POS)
-            d2destin = np.linalg.norm(self.routing[j].DESTINATION - state[0:3])
-
-            if np.linalg.norm(self.routing[j].DESTINATION - states[j, 0:3]) <= reachThreshold_m:
-                bool_vals[j] = True
-            elif int(self.CONTACT_FLAGS[j]) == 1:
-                bool_vals[j] = True
-            # Check if the agent is static
-            elif np.allclose(prevd2destin, d2destin, atol=0.05):
-                # Tracks consecutive static actions (used in reward function)
-                self.routing[j].static_action_counter += 1
-                if self.routing[j].static_action_counter >= self.static_action_threshold:
-                    print(f"!! Agent {j}: stayed static for {self.ALLOWED_WAITING_S} s! Terminating episode.")
-                    bool_vals[j] = True
-            else:
-                bool_vals[j] = False
-
-        # If episode time is up, mark all done
-        if self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
-            done = {i: True for i in range(self.NUM_DRONES)}
-            done["__all__"] = True
-            print("<< TIME-OUT >>")
-            return done
-
-        # If any drone collides, end the entire episode
-        elif collision_occurred:
+        if collision_occurred:
             done = {i: True for i in range(self.NUM_DRONES)}
             done["__all__"] = True
             print(f"<< COLLISION at {elapsed_time_sec} s >>")
             return done
+        # If episode time is up, mark all done
+        elif self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
+            done = {i: True for i in range(self.NUM_DRONES)}
+            done["__all__"] = True
+            print("<< TIME-OUT >>")
+            return done
+        else:
         
+            for j in range(self.NUM_DRONES):
+                state = self._getDroneStateVector(j)
+                curPos = np.array(state[0:3])
+                prevd2destin = np.linalg.norm(self.routing[j].DESTINATION - self.routing[j].CUR_POS)
+                d2destin = np.linalg.norm(self.routing[j].DESTINATION - state[0:3])
 
-        # Otherwise, continue based on individual goals
-        done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
-        # done["__all__"] = all(bool_vals)   # Done if all finish
-        # done["__all__"] = True if True in done.values() else False   # Done if any finish
+                if np.linalg.norm(self.routing[j].DESTINATION - states[j, 0:3]) <= reachThreshold_m:
+                    bool_vals[j] = True
+                elif int(self.CONTACT_FLAGS[j]) == 1:
+                    bool_vals[j] = True
+                # Check if the agent is static
+                # elif np.allclose(prevd2destin, d2destin, atol=0.05):
+                #     # Tracks consecutive static actions (used in reward function)
+                #     self.routing[j].static_action_counter += 1
+                #     if self.routing[j].static_action_counter >= self.static_action_threshold:
+                #         print(f"!! Agent {j}: stayed static for {self.ALLOWED_WAITING_S} s! Terminating episode.")
+                #         bool_vals[j] = True
+                else:
+                    bool_vals[j] = False
 
-        done["__all__"] = all(done.values())  # RLlib needs to know when ALL agents are done!
-        # message += " END OF EPISODE <<"
-        # print(message)
-        # print(f"done = {done}")
+            # Otherwise, continue based on individual goals
+            done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
+            done["__all__"] = all(bool_vals)   # Done if all finish
+            # done["__all__"] = True if True in done.values() else False   # Done if any finish
+
+            # done["__all__"] = all(done.values())  # RLlib needs to know when ALL agents are done!
+            # message += " END OF EPISODE <<"
+            # print(message)
+            # print(f"done = {done}")
         return done
 
 

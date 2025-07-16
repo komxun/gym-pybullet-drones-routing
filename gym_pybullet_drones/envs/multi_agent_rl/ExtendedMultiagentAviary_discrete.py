@@ -78,8 +78,9 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
         # self.DESTIN = destin
         self.MISSION = RouteMission()
         self.OBS_CHOICE = 2  # 1: 12 kinematic states | 2: 6 kinamitic states
-        # self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
-        self.MISSION.generateMission(numDrones=num_drones, scenario=1)
+        self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
+        self.DONE = [False for _ in range(num_drones)]
+        # self.MISSION.generateMission(numDrones=num_drones, scenario=1)
         #===============================
 
         if num_drones < 2:
@@ -104,8 +105,8 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
                 self.INIT_XYZS = self.MISSION.INIT_XYZS
                 self.INIT_RPYS = self.MISSION.INIT_RPYS
                 # self.INIT_XYZS = np.zeros((len(self.routing), 3))
-                for j in range(len(self.routing)):
-                    # self.INIT_XYZS[j,:] = self.MISSION.INIT_XYZS[j,:]
+                for j in range(num_drones):
+                    self.INIT_XYZS[j,:] = self.MISSION.INIT_XYZS[j,:]
                     self.routing[j].HOME_POS = self.MISSION.INIT_XYZS[j,:]
                     self.routing[j].DESTINATION = self.MISSION.DESTINS[j,:]
                     self.routing[j].CUR_POS = self.MISSION.INIT_XYZS[j, :]
@@ -227,7 +228,7 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
 
         """
         rpm = np.zeros((self.NUM_DRONES,4))
-        for k in range(len(action)):
+        for k, val in action.items():
             # Process action based on ACT_TYPE
             if self.ACT_TYPE == ActionType.AUTOROUTING:
                 state = self._getDroneStateVector(k)
@@ -281,41 +282,41 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
                 # ======= 11 Actions ==================================================
                 # print(f"xxxxxxxxxxxxx  Action is {action}")
                 
-                if action.get(k) ==0:
+                if val ==0:
                     # print(f"Agent {k}: action 0 >>>>> Accelerating . . .")
                     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 0.05)  # 0.05
-                elif action.get(k) ==1:
+                elif val ==1:
                     # print(f"Agent {k}: action 1 <<<<< Decelerating . . .")
                     self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -5)   # -4
-                elif action.get(k) ==2:
+                elif val ==2:
                     # print(f"Agent {k}: action 2 ===== Hovering . . .")
                     self.routing[k]._setCommand(SpeedCommandFlag, "hover")
-                elif action.get(k) ==3:
+                elif val ==3:
                     # print("This is action 3 >>>> following global route . . .")
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
-                elif action.get(k)==4:
+                elif val==4:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 1)
-                elif action.get(k)==5:
+                elif val==5:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 2)
-                elif action.get(k)==6:
+                elif val==6:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 3)
-                elif action.get(k)==7:
+                elif val==7:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 4)
                 elif action.get(k)==8:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 5)
-                elif action.get(k)==9:
+                elif val==9:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 6)
-                elif action.get(k)==10:
+                elif val==10:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 7)
-                elif action.get(k)==11:
+                elif val==11:
                     self.routing[k]._setCommand(SpeedCommandFlag, "constant")
                     self.routing[k]._setCommand(RouteCommandFlag, "follow_local", 8)
 
@@ -331,7 +332,7 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
                 rpm_k, _, _ = self.ctrl[k].computeControlFromState(control_timestep=self.CTRL_TIMESTEP,
                                                                 state=state,
                                                                 target_pos = self.routing[k].TARGET_POS, 
-                                                                target_rpy = self.INIT_RPYS[k, :],
+                                                                target_rpy = self.MISSION.INIT_RPYS[k,:],
                                                                 target_vel = self.routing[k].TARGET_VEL
                                                                 )
                 rpm[k,:] = rpm_k
@@ -597,16 +598,17 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
             in each subclass for its format.
 
         """
-        # self.MISSION.generateRandomMission(maxNumDrone=self.NUM_DRONES, minNumDrone=self.NUM_DRONES)
-        self.MISSION.generateMission(numDrones=self.NUM_DRONES, scenario=1)
+        self.MISSION.generateRandomMission(maxNumDrone=self.NUM_DRONES, minNumDrone=self.NUM_DRONES)
+        # self.MISSION.generateMission(numDrones=self.NUM_DRONES, scenario=1)
         # TODO : initialize random number generator with seed
         p.resetSimulation(physicsClientId=self.CLIENT)
-        # print(f"I'm resetting the ExtendedMultiagentAviary !")
+        print(f"I'm resetting the ExtendedMultiagentAviary !")
 
         #### Housekeeping ##########################################
         self._housekeeping()
         #### Update and store the drones kinematic information #####
         self._updateAndStoreKinematicInformation()
+        self.DONE = [False for _ in range(self.NUM_DRONES)]
         for j in range(self.NUM_DRONES):
             self.routing[j].reset()
             self.routing[j].CUR_POS = self.MISSION.INIT_XYZS[j,:]
@@ -615,6 +617,8 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
             # self.routing[j].GLOBAL_PATH = np.array([])
             self.routing[j].DESTINATION = self.MISSION.DESTINS[j,:]
             self.CONTACT_FLAGS[j] = 0
+            self.INIT_XYZS[j,:] = self.MISSION.INIT_XYZS[j,:]
+            
         self.OBSTACLE_DATA = {}
         self._getObstaclesData()
         p.performCollisionDetection(physicsClientId=self.CLIENT)

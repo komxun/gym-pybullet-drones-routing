@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import random
 class RouteMission:
     
@@ -54,8 +55,8 @@ class RouteMission:
         RADIUS_VARIATION = 0.2
         # ANGLE_VARIATION = 0.2  # Max random variation for angle (in radians)
         ANGLE_VARIATION = 90 * np.pi/180
-        # Z_VARIATION = 0.2  #0.3     # Max random variation for initial z-axis
-        Z_VARIATION = 0.1
+        Z_VARIATION = 0.2  #0.3     # Max random variation for initial z-axis
+        # Z_VARIATION = 0
 
         # Initialize arrays
         INIT_XYZS = np.zeros((num_drones, 3))
@@ -70,7 +71,7 @@ class RouteMission:
         WAYPOINTS.append(np.vstack((INIT_XYZS[0], DESTINS[0])))
 
         # Position remaining drones in circular paths with added randomness
-        for i in range(1, num_drones):
+        for i in range(0, num_drones):
             # Random radius and angle variations for initial positions
             if i==0:
                 random_radius = BASE_R+2
@@ -84,9 +85,7 @@ class RouteMission:
                 ORIGIN[1] + random_radius * np.sin(random_angle_init) - BASE_R,
                 ORIGIN[2] + i * H_STEP + random.uniform(-Z_VARIATION, Z_VARIATION)
             ]
-
-            # Orientation (roll, pitch fixed, random yaw)
-            INIT_RPYS[i] = [0, 0, random.uniform(0, 2 * np.pi)]
+  
 
             # Random radius and angle variations for destination positions
             random_radius_dest = BASE_R_D + random.uniform(-RADIUS_VARIATION, RADIUS_VARIATION)
@@ -99,6 +98,17 @@ class RouteMission:
                 ORIGIN[2] + i * H_STEP + random.uniform(-Z_VARIATION, Z_VARIATION)
                 # ORIGIN[2]  # Keep z-level consistent for destinations
             ]
+            dx = DESTINS[i][0] -INIT_XYZS[i][0]
+            dy = DESTINS[i][1] -INIT_XYZS[i][1]
+
+            # Orientation (roll, pitch fixed, yaw faces toward destination)
+            initial_yaw = math.pi/2 - math.atan2(dy, dx)
+            # Normalize to 0 to 2π range if needed
+            if initial_yaw < 0:
+                initial_yaw += 2 * math.pi
+            INIT_RPYS[i] = [0, 0, initial_yaw]
+
+
 
             WAYPOINTS.append(np.vstack((INIT_XYZS[i], DESTINS[i])))
 

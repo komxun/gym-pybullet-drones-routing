@@ -216,10 +216,10 @@ if __name__ == "__main__":
     }
     config["multiagent"] = { 
         "policies": {
-            "pol0": (None, observer_space, action_space, {"agent_id": 0,}),
-            "pol1": (None, observer_space, action_space, {"agent_id": 1,}),
+            # uses shared policies
+            "shared_policy": (None, observer_space, action_space, {})
         },
-        "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1", # # Function mapping agent ids to policy ids
+        "policy_mapping_fn": lambda agent_id: "shared_policy",  # All agents map to shared_policy
         # "observation_fn": central_critic_observer, # See rllib/evaluation/observation_function.py for more info
     }
 
@@ -245,12 +245,9 @@ if __name__ == "__main__":
     agent.restore(checkpoint)
 
     #### Extract and print policies ############################
-    policy0 = agent.get_policy("pol0")
+    shared_policy = agent.get_policy("shared_policy")
     # print("action model 0", policy0.model.action_model)
     # print("value model 0", policy0.model.value_model)
-    policy1 = agent.get_policy("pol1")
-    # print("action model 1", policy1.model.action_model)
-    # print("value model 1", policy1.model.value_model)
 
     #### Create test environment ###############################
     # p.disconnect() # Closing all prior environment (important!)
@@ -293,8 +290,8 @@ if __name__ == "__main__":
             # temp[0] = policy0.compute_single_action(np.hstack([action[1], obs[1], obs[0]])) # Counterintuitive order, check params.json
             # temp[1] = policy1.compute_single_action(np.hstack([action[0], obs[0], obs[1]]))
 
-            action_1 = policy0.compute_single_action(obs[0], policy_id="pol0")
-            action_2 = policy1.compute_single_action(obs[1], policy_id="pol1")
+            action_1 = shared_policy.compute_single_action(obs[0])
+            action_2 = shared_policy.compute_single_action(obs[1])
 
             # actions = {0: temp[0][0], 1: temp[1][0]}
             actions = {0: action_1[0], 1: action_2[0]}

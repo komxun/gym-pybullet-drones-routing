@@ -493,8 +493,8 @@ class IFDSRoute(BaseRouting):
         numObj = obstacles_pos.shape[0]
 
         for j in range(numObj):
-            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
-            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
+            # Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
+            Shape(0, "sphere", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 2*obstacles_size[j][0])
             # Shape(0, "cylinder",obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2],1,0.5)
             # Shape(0, "cylinder", obstacles_pos[j][0], obstacles_pos[j][1], obstacles_pos[j][2], 1*obstacles_size[j][0])
     

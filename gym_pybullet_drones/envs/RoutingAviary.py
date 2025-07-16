@@ -231,7 +231,7 @@ class RoutingAviary(BaseAviary):
         These obstacles are loaded from standard URDF files included in Bullet.
 
         """
-        scene = 3  # 3 for final testing
+        scene = 0  # 3 for final testing
         if scene == 0:
             pass
 
