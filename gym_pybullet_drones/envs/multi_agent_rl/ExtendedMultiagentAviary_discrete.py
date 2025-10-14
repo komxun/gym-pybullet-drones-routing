@@ -146,39 +146,6 @@ class ExtendedMultiagentAviary_discrete(RoutingAviary, MultiAgentEnv):
 
     # ################################################################################
 
-    # def _addObstacles(self):
-    #     """Add obstacles to the environment.
-
-    #     Only if the observation is of type RGB, 4 landmarks are added.
-    #     Overrides BaseAviary's method.
-
-    #     """
-    #     if self.OBS_TYPE == ObservationType.RGB:
-    #         p.loadURDF("block.urdf",
-    #                    [1, 0, .1],
-    #                    p.getQuaternionFromEuler([0, 0, 0]),
-    #                    physicsClientId=self.CLIENT
-    #                    )
-    #         p.loadURDF("cube_small.urdf",
-    #                    [0, 1, .1],
-    #                    p.getQuaternionFromEuler([0, 0, 0]),
-    #                    physicsClientId=self.CLIENT
-    #                    )
-    #         p.loadURDF("duck_vhacd.urdf",
-    #                    [-1, 0, .1],
-    #                    p.getQuaternionFromEuler([0, 0, 0]),
-    #                    physicsClientId=self.CLIENT
-    #                    )
-    #         p.loadURDF("teddy_vhacd.urdf",
-    #                    [0, -1, .1],
-    #                    p.getQuaternionFromEuler([0, 0, 0]),
-    #                    physicsClientId=self.CLIENT
-    #                    )
-    #     else:
-    #         pass
-
-    # ################################################################################
-
     def _actionSpace(self):
         """Returns the action space of the environment.
 
