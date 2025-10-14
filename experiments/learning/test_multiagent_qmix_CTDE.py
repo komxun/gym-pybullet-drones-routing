@@ -33,19 +33,19 @@ ACTION_VEC_SIZE = None # Modified at runtime
 if __name__ == "__main__":
 
     # base_file_dir = "/experiments/learning"
-    # file_loc = "./results/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.19.2025_14.28.21"
-    # file_loc = "./results/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.23.2025_11.25.52"
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-4-QMIX-07.28.2025_12.18.56"
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-5-QMIX-07.28.2025_21.53.40"  # Only 200k episodes - ok(?)
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-4-QMIX-07.30.2025_08.22.06"  # 1M 
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-4-QMIX-07.31.2025_16.01.14" # 5e5 trained 4 agents, 10k buffer size, 1k batch size
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_16.15.53"  # 5e5 trained 5 agents, 10k buffer, 64 batch size, 0.7 gamma
-    file_loc = "./results/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_20.44.54" # 5e5 trained 5 agents, 10k buffer, 64 batch, changed reward
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_22.16.08" # 5e5 5 agents, 10k buffer, 64 batch, changed reward (2)
+    # file_loc = "./results/keep/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.19.2025_14.28.21"
+    # file_loc = "./results/keep/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.23.2025_11.25.52"
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.28.2025_12.18.56"
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-07.28.2025_21.53.40"  # Only 200k episodes - ok(?)
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.30.2025_08.22.06"  # 1M 
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.31.2025_16.01.14" # 5e5 trained 4 agents, 10k buffer size, 1k batch size
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_16.15.53"  # 5e5 trained 5 agents, 10k buffer, 64 batch size, 0.7 gamma
+    file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_20.44.54" # 5e5 trained 5 agents, 10k buffer, 64 batch, changed reward
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_22.16.08" # 5e5 5 agents, 10k buffer, 64 batch, changed reward (2)
     #============ Sector method =============
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-8-QMIX-10.06.2025_16.46.07"
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-8-QMIX-10.08.2025_17.44.37"
-    # file_loc = "./results/separate-autorouting-mas-aviary-v0-8-QMIX-10.09.2025_15.18.49"  # best one yet but don't see any NMAC prevention
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.06.2025_16.46.07"
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.08.2025_17.44.37"
+    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.09.2025_15.18.49"  # best one yet but don't see any NMAC prevention
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
     parser.add_argument('--exp',    default=file_loc, type=str,       help='The experiment folder written as ./results/save-<env>-<num_drones>-<algo>-<obs>-<act>-<time_date>', metavar='')
@@ -185,7 +185,7 @@ if __name__ == "__main__":
                 action, new_state, _ = shared_policy.compute_single_action(obs_i, state=state_i)
                 actions[agent_id] = action[0]
                 agent_states[agent_id] = new_state 
-                
+
             
             print(f"Actions: {actions}")
             obs, reward, done, info = test_env.step(actions)
