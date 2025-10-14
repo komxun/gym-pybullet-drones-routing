@@ -65,12 +65,10 @@ class BaseMultiagentAviary(BaseAviary, MultiAgentEnv):
             The type of action space (1 or 3D; RPMS, thurst and torques, waypoint or velocity with PID control; etc.)
 
         """
-        if num_drones < 2:
-            print("[ERROR] in BaseMultiagentAviary.__init__(), num_drones should be >= 2")
-            exit()
-        if act == ActionType.TUN:
-            print("[ERROR] in BaseMultiagentAviary.__init__(), ActionType.TUN can only used with BaseSingleAgentAviary")
-            exit()
+        # if num_drones < 2:
+        #     print("[ERROR] in BaseMultiagentAviary.__init__(), num_drones should be >= 2")
+        #     exit()
+      
         vision_attributes = True if obs == ObservationType.RGB else False
         dynamics_attributes = True if act in [ActionType.DYN, ActionType.ONE_D_DYN] else False
         self.OBS_TYPE = obs

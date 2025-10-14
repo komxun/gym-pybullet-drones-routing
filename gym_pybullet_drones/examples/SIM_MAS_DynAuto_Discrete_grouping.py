@@ -24,22 +24,30 @@ In a terminal, run as:
 
 import sys
 sys.path.append('../../')   # Locate gym_pybullet_drones directory
+import os
 import time
 import argparse
+from datetime import datetime
+import pdb
+import math
+import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
-from ray.rllib.agents import qmix
+
+from gym import spaces
 
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics
+from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.multi_agent_rl.AutoroutingMASAviary_discrete import AutoroutingMASAviary_discrete
 
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
-from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
+from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag
+from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
 
 
@@ -58,8 +66,8 @@ if __name__ == "__main__":
 
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
-    parser.add_argument('--drone',              default="hb",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=5,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--drone',              default="cf2x",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
+    parser.add_argument('--num_drones',         default=4,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -67,8 +75,8 @@ if __name__ == "__main__":
     parser.add_argument('--plot',               default=True,       type=str2bool,      help='Whether to plot the simulation results (default: True)', metavar='')
     parser.add_argument('--aggregate',          default=True,       type=str2bool,      help='Whether to aggregate physics steps (default: True)', metavar='')
     parser.add_argument('--obstacles',          default=True,       type=str2bool,      help='Whether to add obstacles to the environment (default: True)', metavar='')
-    parser.add_argument('--simulation_freq_hz', default=60,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
-    parser.add_argument('--control_freq_hz',    default=60,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
+    parser.add_argument('--simulation_freq_hz', default=240,        type=int,           help='Simulation frequency in Hz (default: 240)', metavar='')
+    parser.add_argument('--control_freq_hz',    default=120,         type=int,           help='Control frequency in Hz (default: 48)', metavar='')
     parser.add_argument('--duration_sec',       default=20,         type=int,           help='Duration of the simulation in seconds (default: 5)', metavar='')
     ARGS = parser.parse_args()
 
@@ -82,20 +90,52 @@ if __name__ == "__main__":
     # INIT_RPYS = np.array([[0, 0,  0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
 
-    config = qmix.DEFAULT_CONFIG.copy() # For the default config, see github.com/ray-project/ray/blob/master/rllib/agents/trainer.py
+
     #### Create the environment with or without video capture ##
-    
-    env = AutoroutingMASAviary_discrete(drone_model=ARGS.drone,
+    grouping = {
+        "group_1": [*range(ARGS.num_drones)],
+    }
+
+    temp_env = AutoroutingMASAviary_discrete(drone_model=ARGS.drone,
                         num_drones=ARGS.num_drones,
                         physics=ARGS.physics,
-                        freq=60,
-                        aggregate_phy_steps=1,
+                        freq=ARGS.simulation_freq_hz,
+                        aggregate_phy_steps=AGGR_PHY_STEPS,
                         gui=ARGS.gui,
                         record=ARGS.record_video,
                         )
+    
+    obs_space = spaces.Tuple([
+        temp_env.observation_space[0],
+        temp_env.observation_space[0],
+        temp_env.observation_space[0],
+        temp_env.observation_space[0],
+    ])
+ 
+  
+    act_space = spaces.Tuple([
+        temp_env.action_space[0],
+        temp_env.action_space[0],
+        temp_env.action_space[0],
+        temp_env.action_space[0],
+    ])
+    
+    temp_env.close()
+    env = AutoroutingMASAviary_discrete(drone_model=ARGS.drone,
+                        num_drones=ARGS.num_drones,
+                        physics=ARGS.physics,
+                        freq=ARGS.simulation_freq_hz,
+                        aggregate_phy_steps=AGGR_PHY_STEPS,
+                        gui=ARGS.gui,
+                        record=ARGS.record_video,
+                        ).with_agent_groups(
+                            groups=grouping,
+                            obs_space=obs_space,
+                            act_space=act_space,
+                        )
 
     #### Obtain the PyBullet Client ID from the environment ####
-    PYB_CLIENT = env.getPyBulletClient()
+    # PYB_CLIENT = env.getPyBulletClient()
 
     #### Initialize the logger #################################
     logger = Logger(logging_freq_hz=int(ARGS.simulation_freq_hz/AGGR_PHY_STEPS),
@@ -103,7 +143,10 @@ if __name__ == "__main__":
                     )
 
     #### Initialize the controllers ############################
-   
+    if ARGS.drone in [DroneModel.CF2X, DroneModel.CF2P]:
+        ctrl = [DSLPIDControl(drone_model=ARGS.drone) for i in range(ARGS.num_drones)]
+    elif ARGS.drone in [DroneModel.HB]:
+        ctrl = [SimplePIDControl(drone_model=ARGS.drone) for i in range(ARGS.num_drones)]
     
     ctrlCounter = 0
     routeCounter = 1
@@ -112,6 +155,7 @@ if __name__ == "__main__":
     routing = [IFDSRoute(drone_model=ARGS.drone, drone_id=i) for i in range(ARGS.num_drones)]
 
     #### Run the simulation ####################################
+    # CTRL_EVERY_N_STEPS = int(np.floor(env.SIM_FREQ/ARGS.control_freq_hz))
     
     START = time.time()
     
@@ -123,39 +167,24 @@ if __name__ == "__main__":
     hoverPos = [np.array([]) for _ in range(ARGS.num_drones)]
     targetVel = [np.array([]) for _ in range(ARGS.num_drones)]
     curSpeed = [0 for _ in range(ARGS.num_drones)]
-
-    num_ep_test = 10
-    for i in range(0, num_ep_test):
+    for i in range(0, int(ARGS.duration_sec*240), AGGR_PHY_STEPS):
         epEnd = False
         env.reset()
-        # print(f"...... Initial RPYS is {env.INIT_RPYS}")
 
-        # Ground fixed camera
-        p.resetDebugVisualizerCamera(cameraDistance=18, cameraYaw=0, cameraPitch=-89, cameraTargetPosition=[0,0,0])
-        count = 0
         while not epEnd:
             #### Step the simulation ###################################
-            count+=1
-            if count >= 4*env.SIM_FREQ and count < 10*env.SIM_FREQ:
-                act = 1
-                print(f"<<<< braking")
-            else:
-                act = 0
-            action = {drone_idx: act for drone_idx in range(ARGS.num_drones)}
+            action = {drone_idx: 0 for drone_idx in range(ARGS.num_drones)}
+            # action = env.action_space.sample()
             obs, reward, done, info = env.step(action)
-            
             # print(f">>>>>>>>>>> done = {done}")
             if done['__all__']==True:
                 print(f"========== EPISODE ENDED ==============")
                 epEnd = True
 
             env.render()
-            # Drone #0 tracking cameara
-            # p.resetDebugVisualizerCamera(cameraDistance=15, cameraYaw=env.routing[0].CUR_RPY[2]*180/np.pi - 90, cameraPitch=-60, cameraTargetPosition=env.routing[0].CUR_POS)
-            
             #### Sync the simulation ###################################
             # if ARGS.gui:
-            sync(i, START, env.TIMESTEP)
+            #     sync(i, START, env.TIMESTEP)
             
 
     #### Close the environment #################################

@@ -1,19 +1,57 @@
 import numpy as np
-import sys
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from collections import deque
 from gym_pybullet_drones.envs.single_agent_rl.BaseSingleAgentAviary import ActionType, ObservationType
 from gym_pybullet_drones.envs.multi_agent_rl.ExtendedMultiagentAviary_discrete import ExtendedMultiagentAviary_discrete
-from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, RouteStatus
+# from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, RouteStatus
 
+# class SimpleStatusPrinter:
+#     def __init__(self, print_interval=200):  # Periodic updates
+#         self.print_interval = print_interval
+#         self.last_step = -1
+
+#     def print_status(self, agent_statuses, step=None):
+#         # agent_statuses is now a dict: {agent_id: status}
+#         has_events = any(status != "Nominal" for status in agent_statuses.values())
+
+#         should_print = (
+#             has_events or 
+#             (step is not None and step % self.print_interval == 0)
+#         )
+
+#         if should_print:
+#             print(f"\n{'=' * 50}")
+#             if step is not None:
+#                 print(f"Step {step}:")
+
+#             if has_events:
+#                 # Show only agents with non-nominal statuses
+#                 for agent_id, status in agent_statuses.items():
+#                     if status != "Nominal":
+#                         emoji = {
+#                             "NMAC": "⚠️ ",
+#                             "Collided": "💥",
+#                             "Reached destination": "🎯",
+#                             "Done": "✅"
+#                         }.get(status, "❓")
+#                         print(f"{emoji} Agent {agent_id}: {status}")
+#             else:
+#                 # Periodic update - all are nominal
+#                 print(f"✅ All {len(agent_statuses)} agents: Nominal")
+
+#             print("=" * 50)
+
+#         self.last_step = step
+
+            
 class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
     """Multi-agent RL problem: leader-follower."""
 
     ################################################################################
 
     def __init__(self,
-                 drone_model: DroneModel=DroneModel.CF2X,
+                 drone_model: DroneModel=DroneModel.HB,
                  num_drones: int=2,
                  neighbourhood_radius: float=np.inf,
                  initial_xyzs=None,
@@ -99,140 +137,246 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
 
     def _computeReward(self):
         """Computes the current reward value.
-
         Returns
         -------
-        dict[int, float]
-            The reward.
-
-        """
+        dict[int, float]"""
         
-        # norm_ep_time = (self.step_counter/self.PYB_FREQ ) / self.EPISODE_LEN_SEC
-        elapsed_time_sec = self.step_counter/self.SIM_FREQ
-
-        # ---------Reward design-------------
-        reachThreshold_m = 0.5  #0.2
-        reward_choice = 11  # 8: best  10: 2nd best 11: Good
-        # prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
-        # d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
-        # h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
-        # self.CURRENT_POS = curPos
-        # CHECK THIS AGAIN!!!!!!
-        # agent_dones = [f"Agent{j}" if self.DONE[j] else "------" for j in range(len(self.DONE)) ]
-        for i in range(0, self.NUM_DRONES):
-            rewards = {}
-            state = self._getDroneStateVector(i)
-            curPos = np.array(state[0:3])
-            prevd2destin = np.linalg.norm(self.routing[i].DESTINATION - self.routing[i].CUR_POS)
-            d2destin = np.linalg.norm(self.routing[i].DESTINATION - state[0:3])
-            h2destin = np.linalg.norm(self.routing[i].DESTINATION - self.routing[i].HOME_POS)
-            self.routing[i].CUR_POS = curPos
-            if reward_choice == 8:
-                """Positive reward design: reach destination asap"""
-                step_cost = 1*(prevd2destin - d2destin) * (1/d2destin)
-                collide_reward = -10 + step_cost
-                destin_reward = 100*(1/d2destin)
-                # destin_reward = 10*(1/d2destin)
-
-                ret = step_cost
-                if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m:
-                    ret = destin_reward
-                    print(f"\n Agent{i}: ====== Reached Destination!!! ====== reward = {ret}\n")
-                elif int(self.CONTACT_FLAGS[i]) == 1:
-                    ret = collide_reward
-                    # print(f"\n***Collided*** ret = {ret}\n")
-            elif reward_choice == 10:
-                step_reward = 1*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
-                collide_reward = -10 + step_reward
-                destin_reward = 100*h2destin
-
-                if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m:
-                    ret = destin_reward
-                    print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
-
-                elif int(self.CONTACT_FLAGS[i]) == 1:
-                    ret = collide_reward
-                    print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
-                else:
-                    if self.routing[0].STAT[0] == RouteStatus.LOCAL:
-                    # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
-                        
-                        # ret = step_reward/2
-                        ret = step_reward/4
-                        # ret = 0
-                        # ret = -0.1
-                        # print(f"ALERT: using local route, ret = {ret}\n")
-                    else:
-                        ret = step_reward
-            elif reward_choice == 11:
-                """Same as reward10, but penalize getting too close to other agent"""
-                step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
-                collide_reward = -10 + step_reward
-                too_close_reward = -2  + step_reward#-2 
-                destin_reward = 100*h2destin
-                if self.DONE[i]:
-                    # print(f"[Agent {i} is idling]")
-                    # print("Finished agents:", end=" ")
-                    # print(*agent_dones, sep=', ')
-                    # sys.stdout.write("\033[F") # Cursor up one line
-                    ret = 0
-                else:       
-                    
-                    # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
-                    # # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
-                    #     ret = step_reward/4
-                    if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m and not self.DONE[i]:
-                        ret = destin_reward
-                        print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
-                        self.DONE[i] = True
-                    elif int(self.CONTACT_FLAGS[i]) == 1:
-                        ret = collide_reward
-                        print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
-                    
-                    elif any(self.routing[i].RAYS_INFO[:,1]<0.2):
-                        print(f"!! Agent {i}: NMAC")
-                        ret = too_close_reward
-                    else:
-                        ret = step_reward
-
-            elif reward_choice == 20:
-                max_distance = h2destin
-                if d2destin < reachThreshold_m:
-                    ret = 5.0
-                elif int(self.CONTACT_FLAGS[i]) == 1:
-                    ret = -1.0
-                    print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
-                else:
-                    # Proportional distance penalty
-                    distance_penalty = -min(d2destin / max_distance, 1.0)
-                    # Reward progress toward the goal
-                    distance_delta = prevd2destin - d2destin
-                    distance_progress_reward = max(distance_delta * 0.2, 0.0) # Reward only positive progress
-
-                    # Check if the agent is static
-                    # if np.allclose(prevd2destin, d2destin, atol=0.05):
-                    #     # # Tracks consecutive static actions (used in reward function)
-                    #     # self.routing[i].static_action_counter += 1  # (Already coded in _computeDone)
-                    #     if self.routing[i].static_action_counter >= self.static_action_threshold:
-                    #         # print(f"!+! Agent {i}: stayed static for 20 actions! Terminating episode.")
-                    #         ret = distance_progress_reward + distance_penalty - 0.5
-                    #     else:
-                    #         ret = distance_progress_reward + distance_penalty - 0.1  # Small penalty for being static
-                    #         # print(f"Agent {i}: Small penalty applied")
-                    # else:
-                    #     self.routing[i].static_action_counter = 0
-                    #     ret = distance_progress_reward + distance_penalty
-                    #     print(f"Agent {i}: progress with reward = {ret}")
-                    self.routing[i].static_action_counter = 0
-                    ret = distance_progress_reward + distance_penalty
-                    # print(f"Agent {i}: progress with reward = {ret}")
-                        
-            rewards[i] = ret
-        # print(f"--> Reward = {rewards}")
+        # Initialize the printer if it doesn't exist
+        # if not hasattr(self, 'status_printer'):
+        #     self.status_printer = SimpleStatusPrinter()
         
+        # elapsed_time_sec = self.step_counter/self.SIM_FREQ
+        reachThreshold_m = 3
+        #======= Reward Design =========
+        reward_collision = -2
+        reward_nmac = -1
+        reward_reached = 2
+
+        common_reward = 0
+        rewards = {}
+
+        
+        
+        min_detect_fraction = self.routing[0].ROV / self.routing[0].RAY_LEN_M  # ROV = in the range between [0, 1]
+                                                                               # 0 = next to the drone, 1 = max range (RAY_LEN_M), 
+        
+        # Track status for each agent
+        # agent_statuses = {}
+
+        for agent_id in [i for i in range(self.NUM_DRONES) if not self.DONE[i]]: # Only agent not done
+            # if self.DONE[agent_id]:  # Skip agents that are already done
+            #     rewards[agent_id] = 0.0
+            #     agent_statuses.append("Done")
+            #     continue
+            state = self._getDroneStateVector(agent_id)
+            d2destin = np.linalg.norm(self.routing[agent_id].DESTINATION - state[0:3])
+            # h2destin = np.linalg.norm(self.routing[agent_id].DESTINATION - self.routing[agent_id].HOME_POS)
+            # Extract shortest detection  (rmin values) (every 3rd value starting at index 0)
+            rmin_values = self.routing[agent_id].SECTOR_INFO[0::3]
+
+            if int(self.CONTACT_FLAGS[agent_id]) == 1:
+                common_reward += reward_collision
+                # agent_statuses[agent_id] = "Collided"
+                self.DONE[agent_id] = True
+
+            elif self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
+                common_reward += reward_collision
+                # agent_statuses[agent_id] = "Time-out"
+                self.DONE[agent_id] = True
+
+            # elif any(self.routing[agent_id].RAYS_INFO[:,1]<min_detect_fraction):
+            #     common_reward += reward_nmac
+            #     # agent_statuses[agent_id] = "NMAC"
+
+            elif any(rmin_values < min_detect_fraction):
+                common_reward += reward_nmac
+                # agent_statuses[agent_id] = "NMAC"
+
+            elif d2destin < reachThreshold_m:
+                common_reward += reward_reached
+                # agent_statuses[agent_id] = "Reached destination"
+                self.DONE[agent_id] = True
+
+            else:
+                common_reward += 1/d2destin 
+                # common_reward += 0.1/d2destin # range [0, 1] # 0.1 too small, agent won't move
+                # common_reward += -1* d2destin/h2destin
+                # agent_statuses[agent_id] = "Nominal"
+
+            # print(f"Agent{agent_id}: d2destin/h2destin = {d2destin/h2destin}")
+
+        # Print status update (replaces previous print)
+        # self.status_printer.print_status(agent_statuses, self.step_counter)
+                
+        rewards = {i: common_reward/self.NUM_DRONES for i in range(self.NUM_DRONES) if not self.DONE[i]}
+        # print(f"rewards is {rewards}")
         return rewards
+
+
+
+
+    # def _computeReward(self):
+    #     """Computes the current reward value.
+
+    #     Returns
+    #     -------
+    #     dict[int, float]
+    #         The reward.
+
+    #     """
+    #     # norm_ep_time = (self.step_counter/self.PYB_FREQ ) / self.EPISODE_LEN_SEC
+    #     elapsed_time_sec = self.step_counter/self.SIM_FREQ
+
+    #     # ---------Reward design-------------
+    #     reachThreshold_m = 0.5  #0.2
+    #     reward_choice = 11  # 8: best  10: 2nd best 11: Good
+    #     # prevd2destin = np.linalg.norm(self.TARGET_POS - self.CURRENT_POS)
+    #     # d2destin = np.linalg.norm(self.TARGET_POS - state[0:3])
+    #     # h2destin = np.linalg.norm(self.TARGET_POS - self.HOME_POS)
+    #     # self.CURRENT_POS = curPos
+    #     # CHECK THIS AGAIN!!!!!!
+    #     # agent_dones = [f"Agent{j}" if self.DONE[j] else "------" for j in range(len(self.DONE)) ]
+    #     reward_array = np.zeros(self.NUM_DRONES)
+    #     rewards = {}
+        
+    #     for i in range(0, self.NUM_DRONES):
+    #         state = self._getDroneStateVector(i)
+    #         curPos = np.array(state[0:3])
+    #         prevd2destin = np.linalg.norm(self.routing[i].DESTINATION - self.routing[i].CUR_POS)
+    #         d2destin = np.linalg.norm(self.routing[i].DESTINATION - state[0:3])
+    #         h2destin = np.linalg.norm(self.routing[i].DESTINATION - self.routing[i].HOME_POS)
+    #         self.routing[i].CUR_POS = curPos
+    #         if reward_choice == 8:
+    #             """Positive reward design: reach destination asap"""
+    #             step_cost = 1*(prevd2destin - d2destin) * (1/d2destin)
+    #             collide_reward = -10 + step_cost
+    #             destin_reward = 100*(1/d2destin)
+    #             # destin_reward = 10*(1/d2destin)
+
+    #             ret = step_cost
+    #             if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m:
+    #                 ret = destin_reward
+    #                 print(f"\n Agent{i}: ====== Reached Destination!!! ====== reward = {ret}\n")
+    #             elif int(self.CONTACT_FLAGS[i]) == 1:
+    #                 ret = collide_reward
+    #                 # print(f"\n***Collided*** ret = {ret}\n")
+    #         elif reward_choice == 10:
+    #             """Penalize the use of local route"""
+    #             step_reward = 1*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
+    #             collide_reward = -10 + step_reward
+    #             destin_reward = 100*h2destin
+
+    #             if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m:
+    #                 ret = destin_reward
+    #                 print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
+
+    #             elif int(self.CONTACT_FLAGS[i]) == 1:
+    #                 ret = collide_reward
+    #                 print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
+    #             else:
+    #                 if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+    #                     ret = step_reward/4
+         
+    #                 else:
+    #                     ret = step_reward
+    #         elif reward_choice == 11:
+    #             """Same as reward10, but penalize getting too close to other agent"""
+    #             step_reward = 1000*(prevd2destin - d2destin) * (1/d2destin) # If step_reward too high -> agent tends to hover near the destination
+    #             collide_reward = -10 + step_reward
+    #             too_close_reward = -2  + step_reward#-2 
+    #             destin_reward = 100*h2destin
+    #             if self.DONE[i]:
+    #                 ret = 0
+    #             else:       
+                    
+    #                 # if self.routing[0].STAT[0] == RouteStatus.LOCAL:
+    #                 # # if self.routing[0].COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
+    #                 #     ret = step_reward/4
+    #                 if np.linalg.norm(self.routing[i].DESTINATION-state[0:3]) < reachThreshold_m and not self.DONE[i]:
+    #                     ret = destin_reward
+    #                     print(f"\n Agent{i}: ====== Reached Destination at {elapsed_time_sec} s!!! ====== reward = {ret}\n")
+    #                     self.DONE[i] = True
+    #                 elif int(self.CONTACT_FLAGS[i]) == 1:
+    #                     ret = collide_reward
+    #                     print(f"***Agent {i} collided at {elapsed_time_sec} s, ret = {ret}")
+                    
+    #                 elif any(self.routing[i].RAYS_INFO[:,1]<0.2):
+    #                     # print(f"!! Agent {i}: NMAC")
+    #                     ret = too_close_reward
+    #                 else:
+    #                     ret = step_reward
+    #         elif reward_choice == 20:
+    #             """Common reward for 3 actions (accel, decell, hover)"""
+
+       
+                        
+    #         rewards[i] = ret
+    #     # print(f"--> Reward = {rewards}")
+    #     # 
+    #     return rewards
+        # return {i: reward_list[i] for i in range(self.NUM_DRONES)}
     ################################################################################
     
+    # def _computeDone(self):
+    #     """Computes the current done value(s).
+
+    #     Returns
+    #     -------
+    #     dict[int | "__all__", bool]
+    #         Dictionary with the done value of each drone and 
+    #         one additional boolean value for key "__all__".
+    #     """
+    #     states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+    #     reachThreshold_m = 0.5
+    #     bool_vals = [False for _ in range(self.NUM_DRONES)]
+
+    #     elapsed_time_sec = self.step_counter/self.SIM_FREQ
+        
+    #     # Check for any collisions
+    #     collision_occurred = any(int(self.CONTACT_FLAGS[j]) == 1 for j in range(self.NUM_DRONES))
+    #     if collision_occurred:
+    #         done = {i: True for i in range(self.NUM_DRONES)}
+    #         done["__all__"] = True
+    #         print(f"<< COLLISION at {elapsed_time_sec} s >>")
+    #         return done
+    #     # If episode time is up, mark all done
+    #     elif self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
+    #         done = {i: True for i in range(self.NUM_DRONES)}
+    #         done["__all__"] = True
+    #         print(f"<< TIME-OUT : t = {self.step_counter / self.SIM_FREQ} >>")
+    #         return done
+    #     else:
+        
+    #         for j in range(self.NUM_DRONES):
+    #             state = self._getDroneStateVector(j)
+    #             curPos = np.array(state[0:3])
+    #             prevd2destin = np.linalg.norm(self.routing[j].DESTINATION - self.routing[j].CUR_POS)
+    #             d2destin = np.linalg.norm(self.routing[j].DESTINATION - state[0:3])
+
+    #             if np.linalg.norm(self.routing[j].DESTINATION - states[j, 0:3]) <= reachThreshold_m:
+    #                 bool_vals[j] = True
+    #             # Check if the agent is static
+    #             # elif np.allclose(prevd2destin, d2destin, atol=0.05):
+    #             #     # Tracks consecutive static actions (used in reward function)
+    #             #     self.routing[j].static_action_counter += 1
+    #             #     if self.routing[j].static_action_counter >= self.static_action_threshold:
+    #             #         print(f"!! Agent {j}: stayed static for {self.ALLOWED_WAITING_S} s! Terminating episode.")
+    #             #         bool_vals[j] = True
+    #             else:
+    #                 bool_vals[j] = False
+
+    #         # Otherwise, continue based on individual goals
+    #         done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
+    #         # done = {i: False for i in range(self.NUM_DRONES)}
+    #         # done["__all__"] = all(bool_vals)   # Done if all finish
+    #         # done["__all__"] = True if True in done.values() else False   # Done if any finish
+
+    #         done["__all__"] = all(done.values())  # RLlib needs to know when ALL agents are done!
+    #         # message += " END OF EPISODE <<"
+    #         # print(message)
+    #         # print(f"done = {done}")
+    #     return done
+
     def _computeDone(self):
         """Computes the current done value(s).
 
@@ -242,56 +386,58 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
             Dictionary with the done value of each drone and 
             one additional boolean value for key "__all__".
         """
-        states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        reachThreshold_m = 0.5
+        # done = {i: False for i in range(self.NUM_DRONES)}
+        done = {i: False for i in range(self.NUM_DRONES) if not self.DONE[i]}
+        # states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
+        reachThreshold_m = 1
         bool_vals = [False for _ in range(self.NUM_DRONES)]
 
-        elapsed_time_sec = self.step_counter/self.SIM_FREQ
+        # elapsed_time_sec = self.step_counter/self.SIM_FREQ
         
         # Check for any collisions
         collision_occurred = any(int(self.CONTACT_FLAGS[j]) == 1 for j in range(self.NUM_DRONES))
-        if collision_occurred:
-            done = {i: True for i in range(self.NUM_DRONES)}
-            done["__all__"] = True
-            print(f"<< COLLISION at {elapsed_time_sec} s >>")
-            return done
-        # If episode time is up, mark all done
-        elif self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
-            done = {i: True for i in range(self.NUM_DRONES)}
-            done["__all__"] = True
-            print("<< TIME-OUT >>")
-            return done
-        else:
         
-            for j in range(self.NUM_DRONES):
-                state = self._getDroneStateVector(j)
-                curPos = np.array(state[0:3])
-                prevd2destin = np.linalg.norm(self.routing[j].DESTINATION - self.routing[j].CUR_POS)
-                d2destin = np.linalg.norm(self.routing[j].DESTINATION - state[0:3])
+        for j in range(self.NUM_DRONES):
+            state = self._getDroneStateVector(j)
+            # curPos = np.array(state[0:3])
+            # prevd2destin = np.linalg.norm(self.routing[j].DESTINATION - self.routing[j].CUR_POS)
+            d2destin = np.linalg.norm(self.routing[j].DESTINATION - state[0:3])
 
-                if np.linalg.norm(self.routing[j].DESTINATION - states[j, 0:3]) <= reachThreshold_m:
-                    bool_vals[j] = True
-                elif int(self.CONTACT_FLAGS[j]) == 1:
-                    bool_vals[j] = True
-                # Check if the agent is static
-                # elif np.allclose(prevd2destin, d2destin, atol=0.05):
-                #     # Tracks consecutive static actions (used in reward function)
-                #     self.routing[j].static_action_counter += 1
-                #     if self.routing[j].static_action_counter >= self.static_action_threshold:
-                #         print(f"!! Agent {j}: stayed static for {self.ALLOWED_WAITING_S} s! Terminating episode.")
-                #         bool_vals[j] = True
-                else:
-                    bool_vals[j] = False
+            if d2destin <= reachThreshold_m:
+                bool_vals[j] = True
+            elif int(self.CONTACT_FLAGS[j]) == 1:
+                bool_vals[j] = True
+            else:
+                bool_vals[j] = False
 
-            # Otherwise, continue based on individual goals
-            done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
-            done["__all__"] = all(bool_vals)   # Done if all finish
-            # done["__all__"] = True if True in done.values() else False   # Done if any finish
+        # If episode time is up, mark all done
+        if self.step_counter / self.SIM_FREQ > self.EPISODE_LEN_SEC:
+            # done = {i: True for i in range(self.NUM_DRONES)}
+            # done = {0: True}
+            done["__all__"] = True
+            # print("<< TIME-OUT >>")
+            return done
 
-            # done["__all__"] = all(done.values())  # RLlib needs to know when ALL agents are done!
-            # message += " END OF EPISODE <<"
-            # print(message)
-            # print(f"done = {done}")
+        # If any drone collides, end the entire episode
+        elif collision_occurred:
+            # done = {i: True for i in range(self.NUM_DRONES)}
+            # done = {0: True}
+            done["__all__"] = True
+            # print(f"<< COLLISION >>")
+            return done
+        
+
+        # Otherwise, continue based on individual goals
+        # done = {i: bool_vals[i] for i in range(self.NUM_DRONES)}
+        done = {i: bool_vals[i] for i in range(self.NUM_DRONES) if not self.DONE[i]}
+        # done["__all__"] = all(bool_vals)   # Done if all finish
+        done["__all__"] = all(self.DONE)
+        # done["__all__"] = True if True in done.values() else False   # Done if any finish
+
+        # message += " END OF EPISODE <<"
+        # print(message)
+        # print(f"done = {done}")
+        # print(f"self.DONE = {self.DONE}")
         return done
 
 
@@ -342,14 +488,14 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
         clipped_vel_xy = np.clip(state[10:12], -MAX_LIN_VEL_XY, MAX_LIN_VEL_XY)
         clipped_vel_z = np.clip(state[12], -MAX_LIN_VEL_Z, MAX_LIN_VEL_Z)
 
-        if self.GUI:
-            self._clipAndNormalizeStateWarning(state,
-                                               clipped_pos_xy,
-                                               clipped_pos_z,
-                                               clipped_rp,
-                                               clipped_vel_xy,
-                                               clipped_vel_z
-                                               )
+        # if self.GUI:
+        #     self._clipAndNormalizeStateWarning(state,
+        #                                        clipped_pos_xy,
+        #                                        clipped_pos_z,
+        #                                        clipped_rp,
+        #                                        clipped_vel_xy,
+        #                                        clipped_vel_z
+        #                                        )
 
         normalized_pos_xy = clipped_pos_xy / MAX_XY
         normalized_pos_z = clipped_pos_z / MAX_Z
@@ -388,7 +534,7 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
             (5,)-shaped array of floats containing the normalized information of a SINGLE ray
 
         """
-        # Ray info -- [hit_ids, hit_fraction, hit_pos_x, hit_pos_y, hit_pos_z] per ray
+        num_info_extract = len(rayinfo)   # 3 or 5 [hit_ids, hit_fraction, hit_pos_x, hit_pos_y, hit_pos_z] per ray
         MAX_HIT_IDS = self.NUM_DRONES
         MIN_HIT_IDS = -1
 
@@ -398,24 +544,33 @@ class AutoroutingMASAviary_discrete(ExtendedMultiagentAviary_discrete):
         MAX_XY = MAX_LIN_VEL_XY*self.EPISODE_LEN_SEC
         MAX_Z = MAX_LIN_VEL_Z*self.EPISODE_LEN_SEC
 
-        clipped_hit_ids = np.clip(rayinfo[0], MIN_HIT_IDS, MAX_HIT_IDS)
-        clipped_hit_fraction = rayinfo[1]  # no need (already in [0,1] range)
-        clipped_hit_pos_xy = np.clip(rayinfo[2:4], -MAX_XY, MAX_XY)
-        clipped_hit_pos_z = np.clip(rayinfo[4], 0, MAX_Z)
+        if num_info_extract == 5:
+            clipped_hit_ids = np.clip(rayinfo[0], MIN_HIT_IDS, MAX_HIT_IDS)
+            clipped_hit_fraction = rayinfo[1]  # no need (already in [0,1] range)
+            clipped_hit_pos_xy = np.clip(rayinfo[2:4], -MAX_XY, MAX_XY)
+            clipped_hit_pos_z = np.clip(rayinfo[4], 0, MAX_Z)
 
+            normalized_hit_ids = clipped_hit_ids / MAX_HIT_IDS     # [-1, 1]
+            normalized_hit_fraction = clipped_hit_fraction # [0, 1]
+            normalized_hit_pos_xy = clipped_hit_pos_xy / MAX_XY  #[-1, 1]
+            normalized_hit_pos_z = clipped_hit_pos_z / MAX_Z   #[0, 1]
 
-        normalized_hit_ids = clipped_hit_ids / MAX_HIT_IDS     # [-1, 1]
-        normalized_hit_fraction = clipped_hit_fraction # [0, 1]
-        normalized_hit_pos_xy = clipped_hit_pos_xy / MAX_XY  #[-1, 1]
-        normalized_hit_pos_z = clipped_hit_pos_z / MAX_Z   #[0, 1]
-
-        norm_and_clipped = np.hstack([normalized_hit_ids,
+            norm_and_clipped = np.hstack([normalized_hit_ids,
                                       normalized_hit_fraction,
                                       normalized_hit_pos_xy,
                                       normalized_hit_pos_z,
                                       ]).reshape(5,)
+        elif num_info_extract == 3:
+            clipped_hit_pos_xy = np.clip(rayinfo[0:2], -MAX_XY, MAX_XY)
+            clipped_hit_pos_z = np.clip(rayinfo[2], 0, MAX_Z)
 
+            normalized_hit_pos_xy = clipped_hit_pos_xy / MAX_XY  #[-1, 1]
+            normalized_hit_pos_z = clipped_hit_pos_z / MAX_Z   #[0, 1]
 
+            norm_and_clipped = np.hstack([
+                                      normalized_hit_pos_xy,
+                                      normalized_hit_pos_z,
+                                      ]).reshape(3,)
 
         return norm_and_clipped
     

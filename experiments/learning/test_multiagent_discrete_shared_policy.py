@@ -28,7 +28,7 @@ import torch.nn as nn
 import ray
 from ray import tune
 from ray.tune import register_env
-from ray.rllib.agents import ppo, dqn
+from ray.rllib.agents import ppo, dqn, qmix
 from ray.rllib.agents.ppo import PPOTrainer, PPOTFPolicy
 from ray.rllib.examples.policy.random_policy import RandomPolicy
 from ray.rllib.utils.test_utils import check_learning_achieved
@@ -51,76 +51,6 @@ OWN_OBS_VEC_SIZE = None # Modified at runtime
 ACTION_VEC_SIZE = None # Modified at runtime
 
 ############################################################
-class CustomTorchCentralizedCriticModel(TorchModelV2, nn.Module):
-    """Multi-agent model that implements a centralized value function.
-
-    It assumes the observation is a dict with 'own_obs' and 'opponent_obs', the
-    former of which can be used for computing actions (i.e., decentralized
-    execution), and the latter for optimization (i.e., centralized learning).
-
-    This model has two parts:
-    - An action model that looks at just 'own_obs' to compute actions
-    - A value model that also looks at the 'opponent_obs' / 'opponent_action'
-      to compute the value (it does this by using the 'obs_flat' tensor).
-    """
-
-    def __init__(self, obs_space, action_space, num_outputs, model_config, name):
-        TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
-        nn.Module.__init__(self)
-        self.action_model = FullyConnectedNetwork(
-                                                  Box(low=-1, high=1, shape=(OWN_OBS_VEC_SIZE, )), 
-                                                  action_space,
-                                                  num_outputs,
-                                                  model_config,
-                                                  name + "_action"
-                                                  )
-        self.value_model = FullyConnectedNetwork(
-                                                 obs_space, 
-                                                 action_space,
-                                                 1, 
-                                                 model_config, 
-                                                 name + "_vf"
-                                                 )
-        self._model_in = None
-
-    def forward(self, input_dict, state, seq_lens):
-        self._model_in = [input_dict["obs_flat"], state, seq_lens]
-        return self.action_model({"obs": input_dict["obs"]["own_obs"]}, state, seq_lens)
-
-    def value_function(self):
-        value_out, _ = self.value_model({"obs": self._model_in[0]}, self._model_in[1], self._model_in[2])
-        return torch.reshape(value_out, [-1])
-
-############################################################
-class FillInActions(DefaultCallbacks):
-    def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch, original_batches, **kwargs):
-        to_update = postprocessed_batch[SampleBatch.CUR_OBS]
-        other_id = 1 if agent_id == 0 else 0
-        action_encoder = ModelCatalog.get_preprocessor_for_space( 
-                                                                 # Box(-np.inf, np.inf, (ACTION_VEC_SIZE,), np.float32) # Unbounded
-                                                                #  Box(0, 10, (ACTION_VEC_SIZE,), np.int16) # Bounded
-                                                                Discrete(5)
-                                                                 )
-        _, opponent_batch = original_batches[other_id]
-        # opponent_actions = np.array([action_encoder.transform(a) for a in opponent_batch[SampleBatch.ACTIONS]]) # Unbounded
-        opponent_actions = np.array([action_encoder.transform(np.clip(a, -1, 1)) for a in opponent_batch[SampleBatch.ACTIONS]]) # Bounded
-        to_update[:, -ACTION_VEC_SIZE:] = opponent_actions
-
-############################################################
-def central_critic_observer(agent_obs, **kw):
-    new_obs = {
-        0: {
-            "own_obs": agent_obs[0],
-            "opponent_obs": agent_obs[1],
-            "opponent_action": np.zeros(ACTION_VEC_SIZE), # Filled in by FillInActions
-        },
-        1: {
-            "own_obs": agent_obs[1],
-            "opponent_obs": agent_obs[0],
-            "opponent_action": np.zeros(ACTION_VEC_SIZE), # Filled in by FillInActions
-        },
-    }
-    return new_obs
 
 def Retrieve_env_info():
     #### Unused env to extract the act and obs spaces ##########
@@ -130,11 +60,7 @@ def Retrieve_env_info():
                                     obs=OBS,
                                     act=ACT
                                     )
-    # observer_space = Dict({
-    #     "own_obs": temp_env.observation_space,
-    #     "opponent_obs": temp_env.observation_space,
-    #     "opponent_action": temp_env.action_space,
-    # })
+
     observer_space = temp_env.observation_space[0]
     action_space = temp_env.action_space[0]
     temp_env.close()
@@ -222,21 +148,6 @@ if __name__ == "__main__":
         "policy_mapping_fn": lambda agent_id: "shared_policy",  # All agents map to shared_policy
         # "observation_fn": central_critic_observer, # See rllib/evaluation/observation_function.py for more info
     }
-
-    #### Set up the model parameters of the trainer's config ###
-    # config["model"] = { 
-    #     "custom_model": "cc_model",
-    # }
-    
-    #### Set up the multiagent params of the trainer's config ##
-    # config["multiagent"] = { 
-    #     "policies": {
-    #         "pol0": (None, observer_space, action_space, {"agent_id": 0,}),
-    #         "pol1": (None, observer_space, action_space, {"agent_id": 1,}),
-    #     },
-    #     "policy_mapping_fn": lambda x: "pol0" if x == 0 else "pol1", # # Function mapping agent ids to policy ids
-    #     "observation_fn": central_critic_observer, # See rllib/evaluation/observation_function.py for more info
-    # }
 
     #### Restore agent #########################################
     agent = dqn.DQNTrainer(config=config)

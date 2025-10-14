@@ -32,12 +32,12 @@ class SimplePIDControl(BaseControl):
         if self.DRONE_MODEL != DroneModel.HB:
             print("[ERROR] in SimplePIDControl.__init__(), SimplePIDControl requires DroneModel.HB")
             exit()
-        self.P_COEFF_FOR = np.array([.1, .1, .2])
-        self.I_COEFF_FOR = np.array([.0001, .0001, .0001])
-        self.D_COEFF_FOR = np.array([.3, .3, .4])
-        self.P_COEFF_TOR = np.array([.3, .3, .05])
-        self.I_COEFF_TOR = np.array([.0001, .0001, .0001])
-        self.D_COEFF_TOR = np.array([.3, .3, .5])
+        self.P_COEFF_FOR = np.array([0.135, 0.135, 0.135])
+        self.I_COEFF_FOR = np.array([0.135, 0.135, 0.135])
+        self.D_COEFF_FOR = np.array([0.0036, 0.0036, 0.0036])
+        self.P_COEFF_TOR = np.array([0.18, 0.18, 0.18])
+        self.I_COEFF_TOR = np.array([0.018, 0.018, 0.018])
+        self.D_COEFF_TOR = np.array([0.002, 0.002, 0.002])
         self.MAX_ROLL_PITCH = np.pi/6
         self.L = self._getURDFParameter('arm')
         self.THRUST2WEIGHT_RATIO = self._getURDFParameter('thrust2weight')

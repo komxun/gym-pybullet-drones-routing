@@ -83,7 +83,7 @@ class ExtendedMultiagentAviary(RoutingAviary, MultiAgentEnv):
         #===============================
 
         if num_drones < 2:
-            print("[ERROR] in BaseMultiagentAviary.__init__(), num_drones should be >= 2")
+            print("[ERROR] in ExtendedMultiagentAviary.__init__(), num_drones should be >= 2")
             exit()
         if act == ActionType.TUN:
             print("[ERROR] in BaseMultiagentAviary.__init__(), ActionType.TUN can only used with BaseSingleAgentAviary")

@@ -4,7 +4,6 @@ from gym import spaces
 import pybullet as p
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics, BaseAviary
 from PIL import Image
-from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 
 class RoutingAviary(BaseAviary):
     """Single-drone environment class for routing application"""
@@ -79,7 +78,7 @@ class RoutingAviary(BaseAviary):
         self.INIT_RPYS = np.zeros((self.NUM_DRONES, 3))
        
         #### Set a limit on the maximum target speed ###############
-        speedLimitingFactor = 0.05   # 0.03
+        speedLimitingFactor = 0.5   # 0.03
         self.SPEED_LIMIT = speedLimitingFactor * self.MAX_SPEED_KMH * (1000/3600)
         self.CONTACT_POINTS = [() for _ in range(self.NUM_DRONES)]
         self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES)
@@ -214,6 +213,7 @@ class RoutingAviary(BaseAviary):
         #### Advance the step counter ##############################
         self._getObstaclesData()
         self.step_counter = self.step_counter + (1 * self.AGGR_PHY_STEPS)
+        # print(f"Stepping . . . step_counter = {self.step_counter}")
         return obs, reward, done, info
     
     ################################################################################
@@ -608,7 +608,7 @@ class RoutingAviary(BaseAviary):
   
             if len(self.CONTACT_POINTS[i]) > 0:
                 self.CONTACT_FLAGS[i] = 1
-                print("Agent" + str(i) + ": Collided !!!!!!!!!!!!!!!")
+                # print("Agent" + str(i) + ": Collided !!!!!!!!!!!!!!!")
             else:
                 self.CONTACT_FLAGS[i] = 0
                 

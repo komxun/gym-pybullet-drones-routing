@@ -30,11 +30,11 @@ class IFDSRoute(BaseRouting):
         super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
         # self.RHO0_IFDS = 6.5
-        self.RHO0_IFDS = 8.5
+        self.RHO0_IFDS = 2.5
         self.SIGMA0_IFDS = 2
         self.ALPHA = 0
         self.SF_IFDS = 0
-        self.TARGET_THRESH = 0.1
+        self.TARGET_THRESH = 1
         self.SIM_MODE = 2
         self.DT = 0.5  # 0.1  #0.5
         self.TSIM = 10
@@ -111,6 +111,8 @@ class IFDSRoute(BaseRouting):
         self._updateCurPos(cur_pos)
         self._updateCurRpy(cur_rpy_rad)
         self._updateCurVel(cur_vel)
+        # if self.DRONE_ID == 0:
+        #     print(f"computeRoute -> cur speed = {np.linalg.norm(self.CUR_VEL)}")
         self.route_counter += 1
         
         # Pre-allocation waypoints and paths
@@ -118,7 +120,7 @@ class IFDSRoute(BaseRouting):
         wp = start_pos.reshape(3,1)
  
         # vel = np.linalg.norm(cur_vel)
-        vel = 0.3
+        vel = 1
  
         # Generate a route from the IFDS path-planning algorithm
         foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacle_data)
@@ -152,44 +154,53 @@ class IFDSRoute(BaseRouting):
         self._updateTargetVel(route_timestep, speed_limit, path_vect_unit)
         
     def _updateTargetVel(self, route_timestep, speed_limit, path_vect_unit):
-        # -------------------- Target Velocity Vector ----------------------
         curSpeed = np.linalg.norm(self.CUR_VEL)
-        # print(f"\n Current Speed = {curSpeed}\n")
-        
-        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 0.2:
-            # print("Reaching destination -> Stopping . . .")
+
+        # --- Check if near destination ---
+        if np.linalg.norm(self.CUR_POS - self.DESTINATION) <= 2:
             self.TARGET_VEL = np.zeros(3)
             self.REACH_DESTIN = 1
-            # acceleration = 0
-        # elif self.STAT[1].name == 'DECELERATE' and np.linalg.norm(self.CUR_VEL) <= 0.3:
-        #     print("stopping")
-        #     # self.TARGET_VEL = np.zeros(3)  # No need since already update in _processSpeedCommand()
-        #     self._setCommand(SpeedCommandFlag, "hover")
-        else:
-            # if np.linalg.norm(self.CUR_POS - self.DESTINATION) < 4: # [m]
-            #     print("Approaching destination -> Decelerating . . .")
-            #     self._setCommand(SpeedCommandFlag, "accelerate", -0.02)  # [m/s^2]
-            self.REACH_DESTIN = 0
-            if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
-                acceleration = self.COMMANDS[1]._value
-                # self.TARGET_VEL = (curSpeed + acceleration*route_timestep*100) * path_vect_unit
-                # self.TARGET_VEL = (curSpeed + acceleration*self.route_counter*0.01) * path_vect_unit
-    
-                # print(f"\ncurSpeed + accel*dt = {(curSpeed + acceleration*self.DT)}\n")
-                self.TARGET_VEL = (curSpeed + acceleration*self.DT) * path_vect_unit
-            elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
-                if self.COMMANDS[1]._value:
-                    self.TARGET_VEL = self.COMMANDS[1]._value * path_vect_unit
-                else:
-                    self.TARGET_VEL = curSpeed * path_vect_unit
-               
+            return
+
+        self.REACH_DESTIN = 0
+        if curSpeed > speed_limit:
+            curSpeed = speed_limit
+        if self.COMMANDS[1]._name == SpeedCommandFlag.ACCEL.value:
+            acceleration = self.COMMANDS[1]._value
+            new_speed = curSpeed + acceleration * (self.DT)
+            # if self.DRONE_ID == 0:
+            #     print(f"cur_speed is {curSpeed}, new_speed_raw is {new_speed}, accel = {acceleration}, dt = {self.DT}")
+            
+
+            # Clamp at zero to avoid negative forward motion
+            if new_speed >0:
+                new_speed = max(0.0, min(new_speed, speed_limit))
+            elif new_speed <0:
+                new_speed = min(0.0, max(new_speed, -speed_limit))
+                # new_speed = 0
+            
+
+            # If accelerating negatively, apply reverse force to slow down
+            self.TARGET_VEL = abs(new_speed) * path_vect_unit
+            # if self.DRONE_ID==0:
+            #     print(f"before process: new_speed = {new_speed}, |TARGET_VEL| = {np.linalg.norm(self.TARGET_VEL)}")
+
+        elif self.COMMANDS[1]._name == SpeedCommandFlag.CONST.value:
+            if self.COMMANDS[1]._value:
+                self.TARGET_VEL = self.COMMANDS[1]._value * path_vect_unit
+            else:
+                self.TARGET_VEL = curSpeed * path_vect_unit
+
+        # Final clamp
+        
         self._processTargetVel(speed_limit)
+
             
     def _processTargetVel(self, speed_limit):
         
         # print(f"{self.COMMANDS[1]._name}:  {self.COMMANDS[1]._value}")
         if self.COMMANDS[1]._name != 'none' and self.COMMANDS[1]._name != 'hover' and self.STAT[1].name != "HOVERING":
-
+            
             if  np.linalg.norm(self.TARGET_VEL) > speed_limit:
                 # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
                 # self.TARGET_VEL = np.zeros(3)
@@ -204,6 +215,9 @@ class IFDSRoute(BaseRouting):
                 self.TARGET_VEL = targ_vel_unit *speed_limit
                 
             # print(f"Target speed = {np.linalg.norm(self.TARGET_VEL)}")
+
+            # if self.DRONE_ID == 0:
+            #     print(f" new_speed = {np.linalg.norm(self.TARGET_VEL)} (speed limit is {speed_limit})")
                 
             
         else:
@@ -215,15 +229,33 @@ class IFDSRoute(BaseRouting):
         # -------------------- Target Position -----------------------------
         # -----------------Waypoint Skipping Logic--------------------------
         path_vect_unit = np.zeros(3)
-        k = 1   # Initial waypoint number to follow
+        acceleration = 0
+        if self.COMMANDS[1]._value:
+            acceleration = self.COMMANDS[1]._value
+        curSpeed = min(np.linalg.norm(self.CUR_VEL), speed_limit)
+        new_speed = curSpeed + acceleration * (self.DT)
+        
+        if new_speed < 0 :
+            k = path.shape[1]-1
+            increment = -1
+        else:
+            k = 2   # Initial waypoint number to follow
+            increment = 1
         while True:
+            if new_speed < 0 :
+                if k <= 0:
+                    # print("waypoint #" + str(k) + " exceeded path length")
+                    break
+            else:
+                if k >= path.shape[1]-1:
+                    # print("waypoint #" + str(k) + " exceeded path length")
+                    break
+            k_n = k + increment
+            k_n = max(k_n, 0)
             
-            if k >= path.shape[1]-1:
-                # print("waypoint #" + str(k) + " exceeded path length")
-                break
             Wi = path[:,k]
-            Wf = path[:,k+1]
-            
+            Wf = path[:,k_n]
+
             path_vect = Wf - Wi
             path_vect_unit = path_vect / np.linalg.norm(path_vect)
             a = path_vect[0]
@@ -232,22 +264,27 @@ class IFDSRoute(BaseRouting):
             
             # wp_closeness_threshold = speed_limit/100  # [m]
             # wp_closeness_threshold = speed_limit  # [m]
-            wp_closeness_threshold = speed_limit*self.DT  # [m]
+            # wp_closeness_threshold = speed_limit*self.DT  # [m]
             # wp_closeness_threshold = np.linalg.norm(self.CUR_VEL)/5  # [m]
             # print(f"closeness threshold = {wp_closeness_threshold}")
- 
+            wp_closeness_threshold = 1
+
             # k[j] += 1
             
             # Check if the waypoing is ahead of current position
             if a*(self.CUR_POS[0] - Wf[0]) + b*(self.CUR_POS[1] - Wf[1]) + c*(self.CUR_POS[2]- Wf[2]) < 0:
                 self.TARGET_POS = Wf   # Wi or Wf??
-                # print(f": targeting WP # {k}")
+                # if self.DRONE_ID == 0:
+                #     print(f": targeting WP # {k_n}")
                 if np.linalg.norm(self.CUR_POS.reshape(3,1) - Wf.reshape(3,1)) <= wp_closeness_threshold: 
-                    k += 1
+                    k += increment
                 else:
                     break
             else:
-                k += 1
+                k += increment
+        # print(f"norm of wf - selfpos = {np.linalg.norm(Wf - self.CUR_POS)}")
+        if np.linalg.norm(Wf - self.CUR_POS) != 0:
+            path_vect_unit = (Wf - self.CUR_POS) / np.linalg.norm(Wf - self.CUR_POS)
         
         return path_vect_unit
 

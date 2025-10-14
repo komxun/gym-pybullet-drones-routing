@@ -25,7 +25,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 -0.02"/>
       <geometry>
-        <mesh filename="./quad.obj" scale=".0875 .0875 .0875"/>
+        <mesh filename="./quad.obj" scale="0.2 0.2 0.2"/>
       </geometry> 
       <material name="grey">
         <color rgba=".2 .2 .2 1"/>
@@ -35,7 +35,8 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 -0.075"/>
       <geometry>
-        <cylinder radius=".25" length=".15"/>
+        <!-- <cylinder radius=".25" length=".15"/> -->
+        <cylinder radius="0.5" length="0.6"/>
       </geometry>
     </collision>  
 

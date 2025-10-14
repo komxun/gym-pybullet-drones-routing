@@ -24,12 +24,12 @@ rayFrom = []
 rayTo = []
 rayIds = []
 
-numRays = 100
+numRays = 84
 
-rayLen = 5
+rayLen = 13.36
 
 rayHitColor = [1, 0, 0]
-rayMissColor = [0, 1, 0]
+rayMissColor = [0.1, 0.1, 1]
 
 replaceLines = True
 
