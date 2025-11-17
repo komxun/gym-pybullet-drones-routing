@@ -27,7 +27,7 @@ numRays = 24
 rayLen = 2
 
 rayHitColor = [1, 0, 0]
-rayMissColor = [0, 1, 0]
+rayMissColor = [0, 0, 1]
 
 replaceLines = False
 

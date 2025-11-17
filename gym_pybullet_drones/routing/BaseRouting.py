@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import xml.etree.ElementTree as etxml
 import pkg_resources
@@ -82,6 +81,7 @@ class BaseRouting(object):
         self.GRAVITY = g*self._getURDFParameter('m')
         """float: The gravitational force (M*g) acting on each drone."""
         self.GLOBAL_PATH = np.array([])
+        self.CURRENT_PATH = np.array([])
         """ndarray (3,N) : The global static route of UAV from starting to destination"""
         self.CUR_POS = np.array([0,0,0])
         self.CUR_VEL = np.array([0,0,0])
@@ -93,8 +93,6 @@ class BaseRouting(object):
         self.STAT = [RouteStatus.GLOBAL, SpeedStatus.CONSTANT]
         
         self.COMMANDS = [Commander(RouteCommandFlag, "none"), Commander(SpeedCommandFlag, "none")]
-        self.SIM_MODE = 2
-        self.PATH_OPTION = 1
         self._resetAllCommands()
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
@@ -105,7 +103,6 @@ class BaseRouting(object):
         self.NUM_SENSORS = 15
         self.SENSOR_FOV_DEG = 20
         self.NUM_RAYS = self.NUM_SENSORS* self.NUM_RAYS_PER_SENSOR
-        # self.RAY_LEN_M = 25
         self.RAY_LEN_M = 11
         self.ROV = 9.96
         # self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
@@ -125,6 +122,7 @@ class BaseRouting(object):
         """
         self.static_action_counter = 0
         self.GLOBAL_PATH = np.array([])
+        self.CURRENT_PATH = np.array([])
         self.route_counter = 0
 
     ################################################################################
@@ -162,32 +160,18 @@ class BaseRouting(object):
         self._processDetection(obstacle_data)
         
         return self.computeRoute(route_timestep=route_timestep,
-                                   cur_pos=state[0:3],
-                                   cur_quat=state[3:7],
-                                   cur_rpy_rad=state[7:10],
-                                   cur_vel=state[10:13],
-                                   cur_ang_vel=state[13:16],
-                                   home_pos = home_pos,
-                                   target_pos=target_pos,
-                                   speed_limit = speed_limit,
-                                   obstacle_data = self.DETECTED_OBS_DATA,
-                                   drone_ids = drone_ids
-                                   )
+                                cur_pos=state[0:3],
+                                target_pos = target_pos,
+                                obstacle_data = self.DETECTED_OBS_DATA,
+                                )
 
     ################################################################################
 
     def computeRoute(self,
                      route_timestep,
                      cur_pos,
-                     cur_quat,
-                     cur_rpy_rad,
-                     cur_vel,
-                     cur_ang_vel,
-                     home_pos,
                      target_pos,
-                     speed_limit,
                      obstacle_data,
-                     drone_ids
                      ):
         """Abstract method to compute the route for a single drone.
 
@@ -240,8 +224,8 @@ class BaseRouting(object):
         start = dronePos
         end = [dronePos[0] + hx, dronePos[1] + hy, dronePos[2]]
 
-        # Draw heading line (red arrow)
-        p.addUserDebugLine(start, end, [0, 0, 0], lineWidth=3, lifeTime=0.05)
+        # Draw heading line (black arrow)
+        # p.addUserDebugLine(start, end, [0, 0, 0], lineWidth=3, lifeTime=0.05)
 
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
@@ -351,6 +335,7 @@ class BaseRouting(object):
             self.STAT[0] = RouteStatus.GLOBAL
             self.SIM_MODE = 2
             self.PATH_OPTION = self.COMMANDS[0]._value
+            self.setCurrentRoute(self.GLOBAL_PATH)
         elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
             self.STAT[0] = RouteStatus.LOCAL
             self.SIM_MODE = 1
@@ -445,6 +430,15 @@ class BaseRouting(object):
         """
         self.GLOBAL_PATH = route
         # print("Setting a global route")
+
+    def setCurrentRoute(self, route):
+        """Store current route
+        Parmaters
+        ---------
+        route : ndarray
+            (3,N)-shaped array of floats containing the current route
+        """
+        self.CURRENT_PATH = route
     
     ################################################################################
     
@@ -466,7 +460,7 @@ class BaseRouting(object):
 
         """
         # rayHitColor = [0, 1, 0]
-        rayHitColor = [0,0,1]
+        rayHitColor = [0,1,0]
         # rayMissColor = [1, 1, 0.1]  # yellow
         rayMissColor = [0, 0.8, 0]  # green
         replaceLines = False
@@ -660,7 +654,7 @@ class BaseRouting(object):
             hit_pos = np.array(result[3])
 
             mask[i] = hit_id >= 0
-            ranges[i] = hit_fraction
+            ranges[i] = hit_fraction * max_range
             angles[i] = self.RAY_ANGLES[i]   # precomputed ray angles
 
         # Sector edges (relative to drone yaw)

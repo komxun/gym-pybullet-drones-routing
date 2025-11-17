@@ -26,6 +26,7 @@ import sys
 sys.path.append('../../')   # Locate gym_pybullet_drones directory
 import time
 import argparse
+import itertools
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
@@ -39,6 +40,23 @@ from gym_pybullet_drones.control.SimplePIDControl import SimplePIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
 from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
+
+def draw_circle_around_drone(center, radius=1.0, color=[0, 1, 0], segments=36, z_offset=0.05):
+    """Draw a circle around a given center position (drone) in the XY plane."""
+    circle_lines = []
+    theta = np.linspace(0, 2 * np.pi, segments + 1)
+    for i in range(segments):
+        x1 = center[0] + radius * np.cos(theta[i])
+        y1 = center[1] + radius * np.sin(theta[i])
+        z1 = center[2] + z_offset
+
+        x2 = center[0] + radius * np.cos(theta[i + 1])
+        y2 = center[1] + radius * np.sin(theta[i + 1])
+        z2 = center[2] + z_offset
+
+        line_id = p.addUserDebugLine([x1, y1, z1], [x2, y2, z2], color, lineWidth=1)
+        circle_lines.append(line_id)
+    return circle_lines
 
 
 
@@ -59,7 +77,7 @@ if __name__ == "__main__":
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Helix flight script using CtrlAviary or VisionAviary and DSLPIDControl')
     parser.add_argument('--drone',              default="hb",     type=DroneModel,    help='Drone model (default: CF2X)', metavar='', choices=DroneModel)
-    parser.add_argument('--num_drones',         default=5,          type=int,           help='Number of drones (default: 3)', metavar='')
+    parser.add_argument('--num_drones',         default=8,          type=int,           help='Number of drones (default: 3)', metavar='')
     parser.add_argument('--physics',            default="pyb",      type=Physics,       help='Physics updates (default: PYB)', metavar='', choices=Physics)
     parser.add_argument('--vision',             default=False,      type=str2bool,      help='Whether to use VisionAviary (default: False)', metavar='')
     parser.add_argument('--gui',                default=True,       type=str2bool,      help='Whether to use PyBullet GUI (default: True)', metavar='')
@@ -82,13 +100,15 @@ if __name__ == "__main__":
     # INIT_RPYS = np.array([[0, 0,  0] for i in range(ARGS.num_drones)])
     AGGR_PHY_STEPS = int(ARGS.simulation_freq_hz/ARGS.control_freq_hz) if ARGS.aggregate else 1
 
+    NUM_DRONES = ARGS.num_drones
+
     config = qmix.DEFAULT_CONFIG.copy() # For the default config, see github.com/ray-project/ray/blob/master/rllib/agents/trainer.py
     #### Create the environment with or without video capture ##
     
     env = AutoroutingMASAviary_discrete(drone_model=ARGS.drone,
                         num_drones=ARGS.num_drones,
                         physics=ARGS.physics,
-                        freq=60,
+                        freq=10,
                         aggregate_phy_steps=1,
                         gui=ARGS.gui,
                         record=ARGS.record_video,
@@ -124,27 +144,132 @@ if __name__ == "__main__":
     targetVel = [np.array([]) for _ in range(ARGS.num_drones)]
     curSpeed = [0 for _ in range(ARGS.num_drones)]
 
-    num_ep_test = 10
+    num_ep_test = 20
+    
+    # Define mapping from action index → label
+    ACTION_LABELS = {
+        0: "Accelerate",
+        1: "Decelerate",
+        2: "Constant Velocity"
+    }
     for i in range(0, num_ep_test):
         epEnd = False
         env.reset()
         # print(f"...... Initial RPYS is {env.INIT_RPYS}")
+        SAFE_DISTANCE = 5.0  # meters
+        debug_items = []     # store current debug visuals
+        min_dists = []       # store history if you want to plot later
 
         # Ground fixed camera
-        p.resetDebugVisualizerCamera(cameraDistance=18, cameraYaw=0, cameraPitch=-89, cameraTargetPosition=[0,0,0])
+        p.resetDebugVisualizerCamera(cameraDistance=35, cameraYaw=0, cameraPitch=-60, cameraTargetPosition=[0,0,0])
         count = 0
         while not epEnd:
             #### Step the simulation ###################################
             count+=1
             if count >= 4*env.SIM_FREQ and count < 10*env.SIM_FREQ:
                 act = 1
-                print(f"<<<< braking")
+                # print(f"<<<< braking")
             else:
                 act = 0
             action = {drone_idx: act for drone_idx in range(ARGS.num_drones)}
             obs, reward, done, info = env.step(action)
+            # print(f"reward is {reward}")
+            # === Compute and visualize inter-drone distances ===
+            # Clear previous debug items
+            p.removeAllUserDebugItems
+            for item in debug_items:
+                p.removeUserDebugItem(item)
+            debug_items = []
+            min_dists_all = []   # optional history logging 
+
+            # Get all drone positions
+            positions = [p.getBasePositionAndOrientation(env.DRONE_IDS[i])[0]
+                        for i in range(ARGS.num_drones)]
             
+            # === Compute pairwise distances ===
+            dist_matrix = np.full((NUM_DRONES, NUM_DRONES), np.inf)
+            for i, j in itertools.combinations(range(NUM_DRONES), 2):
+                dist = np.linalg.norm(np.array(positions[i]) - np.array(positions[j]))  # works now ✅
+                dist_matrix[i, j] = dist_matrix[j, i] = dist
+
+                # Draw color-coded line
+                color = [1, 0, 0] if dist < SAFE_DISTANCE else [0, 1, 0]
+                # debug_items.append(p.addUserDebugLine(positions[i], positions[j], color, lineWidth=2))
+
+            # === Compute and display per-drone min separation ===
+            per_drone_min = np.min(dist_matrix, axis=1)
+            min_dists_all.append(per_drone_min)
+
+            for i in range(NUM_DRONES):
+                min_d = per_drone_min[i]
+                text_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                debug_items.append(
+                    p.addUserDebugText(
+                        f"{min_d:.2f} m",
+                        [0, 0, 0.2],  # small offset above the drone
+                        textColorRGB=text_color,
+                        textSize=1.2,
+                        parentObjectUniqueId=env.DRONE_IDS[i]
+                    )
+                )
+                # Display Action took by agents
+                # act = action[i]
+                # action_label = ACTION_LABELS.get(act, f"Action {act}")
+                # debug_items.append(
+                #     p.addUserDebugText(
+                #         f"{action_label}",
+                #         [0, 0, 2.5],  # stacked above the distance text
+                #         textColorRGB=[0.2, 0.8, 1.0],  # light blue
+                #         textSize=1.1,
+                #         parentObjectUniqueId=env.DRONE_IDS[i]
+                #     )
+                # )
+
+
+             # Draw a circle around each drone
+                circle_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                inner_color = [1, 0, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                circle_ids = draw_circle_around_drone(
+                    center=positions[i],
+                    radius=SAFE_DISTANCE,
+                    color=circle_color,
+                    segments=36,
+                    z_offset=0.05
+                )
+                circle_inner_ids = draw_circle_around_drone(
+                    center=positions[i],
+                    radius=SAFE_DISTANCE-2,
+                    color=[0, 1, 0],
+                    segments=36,
+                    z_offset=0.05
+                )
+                debug_items.extend(circle_ids)
+                debug_items.extend(circle_inner_ids)
+            # === Compute global minimum separation ===
+            global_min_dist = np.min(dist_matrix)
+
+            # === Display global stats at fixed location ===
+            # For example, top-left of the scene: x=-5, y=-5, z=5
+            debug_items.append(
+                p.addUserDebugText(
+                    f"Global min separation: {global_min_dist:.2f} m",
+                    [-35, 25, 5],
+                    textColorRGB=[1, 1, 1],  # white text
+                    textSize=1.5
+                )
+            )
+            debug_items.append(
+                p.addUserDebugText(
+                    f"Timestep: {count}",
+                    [-35, 20, 5],  # slightly below the first text
+                    textColorRGB=[1, 1, 0],  # yellow
+                    textSize=1.5
+                )
+            )
+
             # print(f">>>>>>>>>>> done = {done}")
+            # print(f"sector info is {env.routing[0].SECTOR_INFO}")
+            # print(f"step #{env.step_counter}")
             if done['__all__']==True:
                 print(f"========== EPISODE ENDED ==============")
                 epEnd = True
@@ -155,7 +280,7 @@ if __name__ == "__main__":
             
             #### Sync the simulation ###################################
             # if ARGS.gui:
-            sync(i, START, env.TIMESTEP)
+            # sync(i, START, env.TIMESTEP)
             
 
     #### Close the environment #################################

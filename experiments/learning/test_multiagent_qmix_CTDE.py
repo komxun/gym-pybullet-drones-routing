@@ -3,7 +3,6 @@
 IF RUNNING AS A SCRIPT, MAKE SURE TO CD TO gym-pybullet-drones-routing\experiments\learning
 This scripts runs the best model found by one of the executions of `multiagent.py`
 
-
 Example
 -------
 To run the script, type in a terminal:
@@ -13,6 +12,7 @@ To run the script, type in a terminal:
 """
 import os
 import time
+import itertools
 import argparse
 import numpy as np
 import pybullet as p
@@ -32,20 +32,9 @@ ACTION_VEC_SIZE = None # Modified at runtime
 ############################################################
 if __name__ == "__main__":
 
-    # base_file_dir = "/experiments/learning"
-    # file_loc = "./results/keep/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.19.2025_14.28.21"
-    # file_loc = "./results/keep/save-autorouting-mas-aviary-v0-4-QMIX-kin-autorouting-07.23.2025_11.25.52"
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.28.2025_12.18.56"
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-07.28.2025_21.53.40"  # Only 200k episodes - ok(?)
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.30.2025_08.22.06"  # 1M 
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-4-QMIX-07.31.2025_16.01.14" # 5e5 trained 4 agents, 10k buffer size, 1k batch size
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_16.15.53"  # 5e5 trained 5 agents, 10k buffer, 64 batch size, 0.7 gamma
-    file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_20.44.54" # 5e5 trained 5 agents, 10k buffer, 64 batch, changed reward
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-5-QMIX-08.01.2025_22.16.08" # 5e5 5 agents, 10k buffer, 64 batch, changed reward (2)
-    #============ Sector method =============
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.06.2025_16.46.07"
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.08.2025_17.44.37"
-    # file_loc = "./results/keep/separate-autorouting-mas-aviary-v0-8-QMIX-10.09.2025_15.18.49"  # best one yet but don't see any NMAC prevention
+
+
+    file_loc = "./results/separate-autorouting-mas-aviary-v0-8-QMIX-10.16.2025_10.28.50"  # Very Good (10 Hz)
     #### Define and parse (optional) arguments for the script ##
     parser = argparse.ArgumentParser(description='Multi-agent reinforcement learning experiments script')
     parser.add_argument('--exp',    default=file_loc, type=str,       help='The experiment folder written as ./results/save-<env>-<num_drones>-<algo>-<obs>-<act>-<time_date>', metavar='')
@@ -72,7 +61,7 @@ if __name__ == "__main__":
 
     #### Unused env to extract the act and obs spaces ##########
     temp_env = AutoroutingMASAviary_discrete(num_drones=NUM_DRONES,
-                                             freq = 60,
+                                             freq = 10,
                                             aggregate_phy_steps=1,
                                             obs=OBS,
                                             act=ACT
@@ -90,7 +79,7 @@ if __name__ == "__main__":
 
     
     register_env(temp_env_name, lambda _: AutoroutingMASAviary_discrete(num_drones=NUM_DRONES,
-                                                                        freq = 60,
+                                                                        freq = 10,
                                                                         aggregate_phy_steps=1,
                                                                         obs=OBS,
                                                                         act=ACT
@@ -109,8 +98,21 @@ if __name__ == "__main__":
         "num_gpus": int(os.environ.get("RLLIB_NUM_GPUS", "0")), # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0
         "batch_mode": "complete_episodes",
         "framework": "torch",
-        'buffer_size': 200,
+        'buffer_size': 10000,
         "explore": False,
+        "train_batch_size": 64,
+        "no_done_at_end": True, # MUST SET TO TRUE
+        #----- Algorithm related settings
+        "mixer": "qmix",        # either "qmix" or "vdn" or None (default: qmix)
+        "mixing_embed_dim": 32, # Size of the mixing network embedding (default: 32)
+        "double_q": True,       # Whether to use Double_Q learning (default: True)
+        "gamma": 0.7,
+        # #------ Evaluation ------
+        # "evaluation_interval": 10,  # evaluate with every x training iterations
+        # "evaluation_duration": 100, # default unit is episodes
+        # "evaluation_config":{
+        #     "explore": False,
+        # }
     }
     config["multiagent"] = {
         "policies": {
@@ -144,7 +146,7 @@ if __name__ == "__main__":
     test_env = AutoroutingMASAviary_discrete(num_drones=NUM_DRONES,
                             obs=OBS,
                             act=ACT,
-                            freq = 60,
+                            freq = 10,
                             aggregate_phy_steps=1,
                             gui=True,
                             record=False
@@ -176,7 +178,8 @@ if __name__ == "__main__":
         agent_ids = list(range(NUM_DRONES))
         agent_states = {i: initial_state for i in agent_ids}  # init hidden state per agent
         actions = {}
-
+        p.resetDebugVisualizerCamera(cameraDistance=24, cameraYaw=0, cameraPitch=-80, cameraTargetPosition=[0,0,0])
+        
         while not epEnd:
 
             for agent_id in range(NUM_DRONES):
@@ -196,7 +199,7 @@ if __name__ == "__main__":
             
 
             test_env.render()
-            sync(count, start, test_env.TIMESTEP)
+            # sync(count, start, test_env.TIMESTEP)
             count += 1
             # if OBS==ObservationType.KIN: 
             #     for j in range(NUM_DRONES):

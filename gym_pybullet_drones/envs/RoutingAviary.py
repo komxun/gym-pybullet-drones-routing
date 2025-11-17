@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from gym import spaces
 import pybullet as p
 from gym_pybullet_drones.envs.BaseAviary import DroneModel, Physics, BaseAviary
 from PIL import Image
@@ -53,9 +52,7 @@ class RoutingAviary(BaseAviary):
             Whether to add obstacles to the simulation.
         user_debug_gui : bool, optional
             Whether to draw the drones' axes and the GUI RPMs sliders.
-        
         """
-        
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
                          neighbourhood_radius=neighbourhood_radius,
@@ -210,17 +207,16 @@ class RoutingAviary(BaseAviary):
         self.step_counter = self.step_counter + (1 * self.AGGR_PHY_STEPS)
         # print(f"Stepping . . . step_counter = {self.step_counter}")
         return obs, reward, done, info
-        
+    
     ################################################################################
-        
     def _addObstacles(self):
         """Add obstacles to the environment.
         These obstacles are loaded from standard URDF files included in Bullet.
         """
-        scene = 2  # 3 for final testing
+        scene = 0  # 3 for final testing
         return SceneCreator(self, scene).create()
-    ################################################################################
     
+    ################################################################################
     def _detectCollision(self):
         # print("Processing Collision Detection . . .")
         for i in range(self.NUM_DRONES):
@@ -231,57 +227,34 @@ class RoutingAviary(BaseAviary):
                 # print("Agent" + str(i) + ": Collided !!!!!!!!!!!!!!!")
             else:
                 self.CONTACT_FLAGS[i] = 0
-                
-    
- 
-    ################################################################################   
- 
-    def _getObstaclesData(self):
-        idsList = list(RoutingAviary.OBSTACLE_IDS)
-        # idsList = list(self.DRONE_IDS) + idsList   # Include Drone's ids
-        
-        droneList = list(self.DRONE_IDS)
 
+    ################################################################################   
+    def _getObstaclesData(self):
+        obstacleList = list(RoutingAviary.OBSTACLE_IDS)
+        droneList = list(self.DRONE_IDS)
         # Store obstacles data
-        for j in range(len(idsList)):
-            # if j>=2:
-            #     # Purposely not processing obstacle data
-            #     continue
-            pos, orn = p.getBasePositionAndOrientation(idsList[j])
-            vsd = p.getVisualShapeData(idsList[j])
-            self.OBSTACLE_DATA[str(idsList[j])] = {"position": pos,
-                                                   "size": vsd[0][3]}
-            
-        # Store drones data
-        for j in range(len(droneList)):
-            pos_drone, orn_drone = p.getBasePositionAndOrientation(droneList[j])
-            vsd_drone = p.getVisualShapeData(droneList[j])
-            
-            mod_vsd_drone = np.array(vsd_drone[0][3])/10
-            drone_size = tuple(mod_vsd_drone)
-            self.OBSTACLE_DATA[str(droneList[j])] = {"position": pos_drone,
-                                                   "size": drone_size}
-            
-            
-            
+        self._storeObjectData(obstacleList, scale=1)
+        self._storeObjectData(droneList, scale=1/10)
         
-        
+    def _storeObjectData(self, objectList, scale=1):
+        for j in range(len(objectList)):
+            pos, orn = p.getBasePositionAndOrientation(objectList[j])
+            visualShapeData = p.getVisualShapeData(objectList[j])
+            objectSize = tuple(np.array(visualShapeData[0][3])*scale)
+            self.OBSTACLE_DATA[str(objectList[j])] = {"position": pos,
+                                                      "size": objectSize}
     ################################################################################
     def _applyForceToObstacle(self):
         # Apply force to object -> dynamic obstacles
         t = self.step_counter/self.SIM_FREQ
-        # print(f"Applying forces. step_counter = {self.step_counter}, t = {t}")
-        # print(f"step_counter={t}")
         altering_sec = 2  #1.5
         sign = -1 if (t // altering_sec) % 2 == 0 else 1
         if len(self.OBSTACLE_IDS) != 0:
             for id in self.OBSTACLE_IDS:
                 if id%2 == 0:
                     sign *= -1
-                # p.changeDynamics(id, -1, linearDamping=2)
                 obj_info = p.getDynamicsInfo(id, -1)
                 mass = obj_info[0]
-                # print(f"Object #{id}: mass = {mass}")
                 pos, orn = p.getBasePositionAndOrientation(id)
                 p.applyExternalForce(id, -1, [20*sign,0,-mass*9.81], pos, flags=p.WORLD_FRAME) 
         # else:
@@ -299,13 +272,7 @@ class RoutingAviary(BaseAviary):
             indexed by drone Id in string format.
 
         """
-        #### Action vector ######## P0            P1            P2            P3
-        act_lower_bound = np.array([0.,           0.,           0.,           0.])
-        act_upper_bound = np.array([self.MAX_RPM, self.MAX_RPM, self.MAX_RPM, self.MAX_RPM])
-        return spaces.Dict({str(i): spaces.Box(low=act_lower_bound,
-                                               high=act_upper_bound,
-                                               dtype=np.float32
-                                               ) for i in range(self.NUM_DRONES)})
+        raise NotImplementedError
     
     ################################################################################
 
@@ -320,14 +287,7 @@ class RoutingAviary(BaseAviary):
 
         """
         #### Observation vector ### X        Y        Z       Q1   Q2   Q3   Q4   R       P       Y       VX       VY       VZ       WX       WY       WZ       P0            P1            P2            P3
-        obs_lower_bound = np.array([-np.inf, -np.inf, 0.,     -1., -1., -1., -1., -np.pi, -np.pi, -np.pi, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, 0.,           0.,           0.,           0.])
-        obs_upper_bound = np.array([np.inf,  np.inf,  np.inf, 1.,  1.,  1.,  1.,  np.pi,  np.pi,  np.pi,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  self.MAX_RPM, self.MAX_RPM, self.MAX_RPM, self.MAX_RPM])
-        return spaces.Dict({str(i): spaces.Dict({"state": spaces.Box(low=obs_lower_bound,
-                                                                     high=obs_upper_bound,
-                                                                     dtype=np.float32
-                                                                     ),
-                                                 "neighbors": spaces.MultiBinary(self.NUM_DRONES)
-                                                 }) for i in range(self.NUM_DRONES)})
+        raise NotImplementedError
 
     ################################################################################
 

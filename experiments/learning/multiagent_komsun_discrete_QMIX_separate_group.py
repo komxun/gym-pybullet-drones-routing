@@ -66,18 +66,19 @@ if __name__ == "__main__":
         with open(filename+'/git_commit.txt', 'w+') as f:
             f.write(str(git_commit))
 
-    #### Constants, and errors #################################
-    if ARGS.obs==ObservationType.KIN:
-        # OWN_OBS_VEC_SIZE = 12#
-        OWN_OBS_VEC_SIZE = 127 # 24 rays
-        # OWN_OBS_VEC_SIZE = 133 # 24 rays
+    FREQ = 10 # Hz
 
-    elif ARGS.obs==ObservationType.RGB:
-        print("[ERROR] ObservationType.RGB for multi-agent systems not yet implemented")
-        exit()
-    else:
-        print("[ERROR] unknown ObservationType")
-        exit()
+    #### Constants, and errors #################################
+    # if ARGS.obs==ObservationType.KIN:
+    #     OWN_OBS_VEC_SIZE = 127 # 24 rays
+    #     # OWN_OBS_VEC_SIZE = 133 # 24 rays
+
+    # elif ARGS.obs==ObservationType.RGB:
+    #     print("[ERROR] ObservationType.RGB for multi-agent systems not yet implemented")
+    #     exit()
+    # else:
+    #     print("[ERROR] unknown ObservationType")
+    #     exit()
     if ARGS.act in [ActionType.ONE_D_RPM, ActionType.ONE_D_DYN, ActionType.ONE_D_PID, ActionType.AUTOROUTING]:
         ACTION_VEC_SIZE = 1
     else:
@@ -93,7 +94,7 @@ if __name__ == "__main__":
 
     #### Unused env to extract the act and obs spaces ##########
     temp_env = AutoroutingMASAviary_discrete(num_drones=ARGS.num_drones,
-                                             freq = 60,
+                                             freq = FREQ,
                                             aggregate_phy_steps=1,
                                             obs=ARGS.obs,
                                             act=ARGS.act
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     # }
     grouping = {f"group_{i}": [i] for i in range(ARGS.num_drones)}
     register_env(temp_env_name, lambda _: AutoroutingMASAviary_discrete(num_drones=ARGS.num_drones,
-                                                                        freq = 60,
+                                                                        freq = FREQ,
                                                                         aggregate_phy_steps=1,
                                                                         obs=ARGS.obs,
                                                                         act=ARGS.act
@@ -155,7 +156,7 @@ if __name__ == "__main__":
         # Config for the Exploration class' constructor:
         "initial_epsilon": 1.0,
         "final_epsilon": 0.3,  # (default: 0.02)
-        "epsilon_timesteps": 100000,  # Timesteps over which to anneal epsilon. (default: 10000)
+        "epsilon_timesteps": 250000,  # Timesteps over which to anneal epsilon. (default: 10000)
 
         # For soft_q, use:
         # "exploration_config" = {
@@ -177,7 +178,7 @@ if __name__ == "__main__":
     
     #### Ray Tune stopping conditions ##########################
     stop = {
-        "timesteps_total": int(5e5),
+        "timesteps_total": int(1e6),
     }
     results = tune.run(
         "QMIX",

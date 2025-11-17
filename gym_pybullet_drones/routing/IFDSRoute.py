@@ -1,11 +1,8 @@
 import math
 import numpy as np
-import pybullet as p
 
 from gym_pybullet_drones.routing.BaseRouting import BaseRouting, SpeedCommandFlag, RouteStatus
 from gym_pybullet_drones.envs.BaseAviary import DroneModel
-# from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
-# from gym_pybullet_drones.utils.utils import nnlsRPM
 
 class IFDSRoute(BaseRouting):
     """IFDS path-planning class."""
@@ -29,7 +26,8 @@ class IFDSRoute(BaseRouting):
         """
         super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
 
-        # self.RHO0_IFDS = 6.5
+        # ----- IFDS-specific parameters ------
+        self.PATH_OPTION = 1
         self.RHO0_IFDS = 2.5
         self.SIGMA0_IFDS = 2
         self.ALPHA = 0
@@ -58,15 +56,8 @@ class IFDSRoute(BaseRouting):
     def computeRoute(self,
                      route_timestep,
                      cur_pos,
-                     cur_quat,
-                     cur_rpy_rad,
-                     cur_vel,
-                     cur_ang_vel,
-                     home_pos,
                      target_pos,
-                     speed_limit,
                      obstacle_data,
-                     drone_ids
                      ):
         """Computes the IFDS path for a single drone.
 
@@ -108,9 +99,6 @@ class IFDSRoute(BaseRouting):
             print("[Error] in IFDSRoute: Invalid PATH_OPTION")
         # p.removeAllUserDebugItems()
         
-        self._updateCurPos(cur_pos)
-        self._updateCurRpy(cur_rpy_rad)
-        self._updateCurVel(cur_vel)
         # if self.DRONE_ID == 0:
         #     print(f"computeRoute -> cur speed = {np.linalg.norm(self.CUR_VEL)}")
         self.route_counter += 1
@@ -124,14 +112,28 @@ class IFDSRoute(BaseRouting):
  
         # Generate a route from the IFDS path-planning algorithm
         foundPath, path = self._IFDS(wp, route_timestep, cur_pos, vel, start_pos, target_pos, obstacle_data)
-        self._guidanceFromRoute(path, route_timestep, speed_limit)
+        self.setCurrentRoute(path)
+        # self._guidanceFromRoute(route_timestep, speed_limit)
         
-        self._plotRoute(path)
-        self._batchRayCast(drone_ids)
+        
         return foundPath, path
     ################################################################################
     
-    def _guidanceFromRoute(self, path, route_timestep, speed_limit):
+    # def _guidanceFromRoute(self, path, route_timestep, speed_limit):
+    #     """
+    #     Process the route and give the waypoint to be followed by the UAV
+    #     Args:
+    #          (TYPE): DESCRIPTION.
+
+    #     Returns:
+    #         None.
+    #     """
+    #     # Process Command
+    #     self._processCommand()
+    #     self._updateTargetPosAndVel(route_timestep, speed_limit)
+    #     self._resetAllCommands()
+
+    def computeGuidanceFromState(self, state, drone_ids, route_timestep, speed_limit):
         """
         Process the route and give the waypoint to be followed by the UAV
         Args:
@@ -139,12 +141,21 @@ class IFDSRoute(BaseRouting):
 
         Returns:
             None.
-
         """
+
+        cur_pos=state[0:3]
+        cur_rpy_rad=state[7:10]
+        cur_vel=state[10:13]
+        self._updateCurPos(cur_pos)
+        self._updateCurRpy(cur_rpy_rad)
+        self._updateCurVel(cur_vel)
         # Process Command
         self._processCommand()
-        self._updateTargetPosAndVel(path, route_timestep, speed_limit)
+        self._updateTargetPosAndVel(self.CURRENT_PATH, route_timestep, speed_limit)
         self._resetAllCommands()
+        self._batchRayCast(drone_ids)
+        self._plotRoute(self.CURRENT_PATH)
+        
      
             
     ################################################################################
@@ -171,7 +182,6 @@ class IFDSRoute(BaseRouting):
             # if self.DRONE_ID == 0:
             #     print(f"cur_speed is {curSpeed}, new_speed_raw is {new_speed}, accel = {acceleration}, dt = {self.DT}")
             
-
             # Clamp at zero to avoid negative forward motion
             if new_speed >0:
                 new_speed = max(0.0, min(new_speed, speed_limit))
@@ -202,27 +212,13 @@ class IFDSRoute(BaseRouting):
         if self.COMMANDS[1]._name != 'none' and self.COMMANDS[1]._name != 'hover' and self.STAT[1].name != "HOVERING":
             
             if  np.linalg.norm(self.TARGET_VEL) > speed_limit:
-                # targetVel[j] = np.clip(targetVel[j], 0, env.SPEED_LIMIT)
-                # self.TARGET_VEL = np.zeros(3)
-                
-                # self.TARGET_VEL = speed_limit
-                # currentTargSpeed = np.linalg.norm(self.TARGET_VEL)
-                # print(f"Speeed limit: {speed_limit}, Target speed: {currentTargSpeed}")
-                # print(f"\nmax speed limit reached at {speed_limit} m/s\n")
-                
-                # self._setCommand(SpeedCommandFlag, "constant", np.sign(self.COMMANDS[1]._value) * speed_limit)
                 targ_vel_unit = self.TARGET_VEL /  np.linalg.norm(self.TARGET_VEL)
                 self.TARGET_VEL = targ_vel_unit *speed_limit
-                
             # print(f"Target speed = {np.linalg.norm(self.TARGET_VEL)}")
-
             # if self.DRONE_ID == 0:
-            #     print(f" new_speed = {np.linalg.norm(self.TARGET_VEL)} (speed limit is {speed_limit})")
-                
-            
+            #     print(f" new_speed = {np.linalg.norm(self.TARGET_VEL)} (speed limit is {speed_limit})")      
         else:
             self._setCommand(SpeedCommandFlag, "hover")
-            # print(f"Target Vel = {self.TARGET_VEL}")
             
     def _waypointSkipping(self, path, route_timestep, speed_limit):
         
@@ -242,14 +238,11 @@ class IFDSRoute(BaseRouting):
             k = 2   # Initial waypoint number to follow
             increment = 1
         while True:
-            if new_speed < 0 :
-                if k <= 0:
-                    # print("waypoint #" + str(k) + " exceeded path length")
-                    break
-            else:
-                if k >= path.shape[1]-1:
-                    # print("waypoint #" + str(k) + " exceeded path length")
-                    break
+            if (new_speed < 0 and k <= 0):
+                break
+            elif new_speed > 0 and k >= path.shape[1]-1:
+                break
+
             k_n = k + increment
             k_n = max(k_n, 0)
             
@@ -263,17 +256,12 @@ class IFDSRoute(BaseRouting):
             c = path_vect[2]
             
             # wp_closeness_threshold = speed_limit/100  # [m]
-            # wp_closeness_threshold = speed_limit  # [m]
-            # wp_closeness_threshold = speed_limit*self.DT  # [m]
             # wp_closeness_threshold = np.linalg.norm(self.CUR_VEL)/5  # [m]
             # print(f"closeness threshold = {wp_closeness_threshold}")
             wp_closeness_threshold = 1
-
-            # k[j] += 1
-            
             # Check if the waypoing is ahead of current position
             if a*(self.CUR_POS[0] - Wf[0]) + b*(self.CUR_POS[1] - Wf[1]) + c*(self.CUR_POS[2]- Wf[2]) < 0:
-                self.TARGET_POS = Wf   # Wi or Wf??
+                self.TARGET_POS = Wf 
                 # if self.DRONE_ID == 0:
                 #     print(f": targeting WP # {k_n}")
                 if np.linalg.norm(self.CUR_POS.reshape(3,1) - Wf.reshape(3,1)) <= wp_closeness_threshold: 
@@ -282,7 +270,7 @@ class IFDSRoute(BaseRouting):
                     break
             else:
                 k += increment
-        # print(f"norm of wf - selfpos = {np.linalg.norm(Wf - self.CUR_POS)}")
+
         if np.linalg.norm(Wf - self.CUR_POS) != 0:
             path_vect_unit = (Wf - self.CUR_POS) / np.linalg.norm(Wf - self.CUR_POS)
         

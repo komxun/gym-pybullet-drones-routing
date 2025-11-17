@@ -154,7 +154,7 @@ class BaseAviary(gym.Env):
         #### Connect to PyBullet ###################################
         if self.GUI:
             #### With debug GUI ########################################
-            self.CLIENT = p.connect(p.GUI) # p.connect(p.GUI, options="--opengl2")
+            self.CLIENT = p.connect(p.GUI, options='--background_color_red=0.1 --background_color_green=0.1 --background_color_blue=0.1') # p.connect(p.GUI, options="--opengl2")
             for i in [p.COV_ENABLE_RGB_BUFFER_PREVIEW, p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW]:
                 p.configureDebugVisualizer(i, 0, physicsClientId=self.CLIENT)
             p.resetDebugVisualizerCamera(cameraDistance=3,
@@ -461,7 +461,7 @@ class BaseAviary(gym.Env):
         p.setTimeStep(self.TIMESTEP, physicsClientId=self.CLIENT)
         p.setAdditionalSearchPath(pybullet_data.getDataPath(), physicsClientId=self.CLIENT)
         #### Load ground plane, drone and obstacles models #########
-        self.PLANE_ID = p.loadURDF("plane.urdf", physicsClientId=self.CLIENT)
+        # self.PLANE_ID = p.loadURDF("plane.urdf", physicsClientId=self.CLIENT)
 
         self.DRONE_IDS = np.array([p.loadURDF(pkg_resources.resource_filename('gym_pybullet_drones', 'assets/'+self.URDF),
                                               self.INIT_XYZS[i,:],

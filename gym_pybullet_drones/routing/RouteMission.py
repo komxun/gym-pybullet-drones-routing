@@ -18,8 +18,8 @@ class RouteMission:
         self._validate_random_mission_inputs(minNumDrone, maxNumDrone, seed, min_travel_distance)
 
         ORIGIN = [0, 0, 5]
-        BASE_R  = 20  #4
-        BASE_R_D = 15  #4
+        BASE_R  = 30  #4
+        BASE_R_D = 25  #4
         H_STEP = 0
         RADIUS_VARIATION = 0.5
         ANGLE_VARIATION = np.pi / 4  # 45 deg
