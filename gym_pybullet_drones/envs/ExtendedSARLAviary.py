@@ -76,7 +76,7 @@ class ExtendedSARLAviary(RoutingAviary):
 
         self.MISSION = RouteMission()
         self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
-        self.OBS_CHOICE = "ray"  # ray, sensor, sector
+        self.OBS_CHOICE = "sensor"  # ray, sensor, sector
         
         # =============================================================================
 
@@ -176,6 +176,20 @@ class ExtendedSARLAviary(RoutingAviary):
         for k in range(self.NUM_DRONES):  # k: num drone
             # Process action based on ACT_TYPE
             if self.ACT_TYPE == ActionType.AUTOROUTING:
+                if k != 0:
+                    # Looping Home<->Destination
+                    if self.routing[k].REACH_DESTIN:
+                        self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)  # 0.05
+                        # self.routing[k].reset()
+                        # tempDestin = self.routing[k].DESTINATION
+                        # tempHome = self.routing[k].HOME_POS
+                        # self.routing[k].DESTINATION = tempHome
+                        # self.routing[k].HOME_POS = tempDestin
+                        # self.routing[k].route_counter = 0
+                    else:
+                        # self.routing[k]._setCommand(SpeedCommandFlag, "constant")
+                        self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
+                        self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)  # 0.05
                 state = self._getDroneStateVector(k)
 
                 #------- Compute route (waypoint) to follow ----------------
@@ -200,18 +214,7 @@ class ExtendedSARLAviary(RoutingAviary):
                         self.routing[k].setGlobalRoute(np.array(gpath).reshape((3,n_wp)))
                             # raise ValueError("[Error] Global route was not found. Mission aborted.")    
 
-                if k != 0:
-                    # Looping Home<->Destination
-                    if self.routing[k].REACH_DESTIN:
-                        self.routing[k].reset()
-                        tempDestin = self.routing[k].DESTINATION
-                        tempHome = self.routing[k].HOME_POS
-                        self.routing[k].DESTINATION = tempHome
-                        self.routing[k].HOME_POS = tempDestin
-                        self.routing[k].route_counter = 0
-                    # self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)  # 0.05
+                
 
                 self.routing[k].computeGuidanceFromState(
                                                     state = state,
@@ -294,17 +297,24 @@ class ExtendedSARLAviary(RoutingAviary):
             num_rays = self.routing[0].NUM_RAYS
             #++++++ Add ray reading to observation space +++++++++++++
             # Ray info: [obj_id, hit_fraction, hitPos_x, hitPos_y, hitPos_z] per ray
-            ray_lo = np.tile([-np.inf, -np.inf, -np.inf], num_rays)
-            ray_hi = np.tile([np.inf, np.inf, np.inf], num_rays)
-            obs_lower_bound = np.concatenate([obs_lower_bound, ray_lo])
-            obs_upper_bound = np.concatenate([obs_upper_bound, ray_hi])
+            # Extract only 3 per ray (hitx, hity, hitz)
+            sensing_lo = np.tile([-np.inf, -np.inf, -np.inf], num_rays)
+            sensing_hi = np.tile([np.inf, np.inf, np.inf], num_rays)
         elif self.OBS_CHOICE == "sensor":
-            pass
+            num_sensors = self.routing[0].NUM_SENSORS
+            # Extracted Features: [r_min, r_mean, dhit] per sensor
+            sensing_lo = np.tile([0, 0, 0], num_sensors)
+            sensing_hi = np.tile([1, 1, 1], num_sensors)
         elif self.OBS_CHOICE == "sector":
-            pass
+            num_sectors = self.routing[0].NUM_SECTORS
+            # Extracted Features: [r_min, r_mean, dhit] per sector (fixed to 8)
+            sensing_lo = np.tile([0, 0, 0], num_sectors)
+            sensing_hi = np.tile([1, 1, 1], num_sectors)
         else:
             print("[ERROR] in BaseRLAviary._observationSpace():  Invalid OBS_CHOICE")
-
+        
+        obs_lower_bound = np.concatenate([obs_lower_bound, sensing_lo])
+        obs_upper_bound = np.concatenate([obs_upper_bound, sensing_hi])
         ############################################################
         obs_lower_bound =  obs_lower_bound.reshape(obs_lower_bound.shape[0],)
         obs_upper_bound =  obs_upper_bound.reshape(obs_upper_bound.shape[0],)
@@ -322,26 +332,34 @@ class ExtendedSARLAviary(RoutingAviary):
 
         """
         size_obs = self.observation_space.shape[0]
+        n_sensing = size_obs - 13  # n_sensing states = total obs states - 13 fixed internal states
         obs_array = np.zeros((1,size_obs))
-        rayinfo = np.zeros((1, self.routing[0].NUM_RAYS*3))
-        sectorinfo_array = np.zeros((1, 8*3))  # 8 SECTORS 3 FEATURES 
         
+        sensing_info = np.zeros((1, n_sensing))
+        # First 13 internal states (fixed)
         obs = self._getDroneStateVector(0)
         self.routing[0]._batchRayCast(self.routing[0].DRONE_ID)
         d2destin = self.routing[0].getDistanceToDestin()
-        ray_matrix = self.routing[0].RAYS_INFO
-        rayinfo[0,:] = np.array([list(ray_matrix.reshape(-1))])   # extract only 3 info from ray
 
         if self.OBS_CHOICE == "ray":
-            obs_array[0,:] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], # omit 3:7 since they are 
-                                        d2destin,
-                                        rayinfo[0,:]
-                                        ]).reshape(size_obs,)
+            # n_obs = self.routing[0].NUM_RAYS * 3
+            sensing_matrix = self.routing[0].RAYS_INFO
         elif self.OBS_CHOICE == "sensor":
-            pass
+            # n_obs = self.routing[0].NUM_SENSORS * 3
+            sensing_matrix = self.routing[0].SENSOR_INFO
         elif self.OBS_CHOICE == "sector":
-            pass
+            # n_obs = self.routing[0].NUM_SECTORS * 3
+            sensing_matrix = self.routing[0].SECTOR_INFO
+        else:
+            raise ValueError(f"[Error] in ExtendedSARLAviary - Invalid OBS_CHOICE")
 
+        # Additional states from Sensing
+        sensing_info[0,:] = np.array([list(sensing_matrix.reshape(-1))])
+
+        obs_array[0,:] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], # omit 3:7 since they are 
+                                    d2destin,
+                                    sensing_info[0,:]
+                                    ]).reshape(size_obs,)
         return obs_array.astype('float32')
  
     def reset(self,
