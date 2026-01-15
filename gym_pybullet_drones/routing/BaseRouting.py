@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import xml.etree.ElementTree as etxml
 import pkg_resources
@@ -82,6 +81,7 @@ class BaseRouting(object):
         self.GRAVITY = g*self._getURDFParameter('m')
         """float: The gravitational force (M*g) acting on each drone."""
         self.GLOBAL_PATH = np.array([])
+        self.CURRENT_PATH = np.array([])
         """ndarray (3,N) : The global static route of UAV from starting to destination"""
         self.CUR_POS = np.array([0,0,0])
         self.CUR_VEL = np.array([0,0,0])
@@ -93,18 +93,22 @@ class BaseRouting(object):
         self.STAT = [RouteStatus.GLOBAL, SpeedStatus.CONSTANT]
         
         self.COMMANDS = [Commander(RouteCommandFlag, "none"), Commander(SpeedCommandFlag, "none")]
-        self.SIM_MODE = 2
-        self.PATH_OPTION = 1
         self._resetAllCommands()
         self.route_counter = 0
         self.DETECTED_OBS_IDS = []
         self.DETECTED_OBS_DATA = {}
 
-        # self.NUM_RAYS = 24
-        self.NUM_RAYS = 200
-        self.RAY_LEN_M = 1.5
-        # self.RAY_LEN_M = 5
+        
+        self.NUM_RAYS_PER_SENSOR = 13
+        self.NUM_SENSORS = 15
+        self.SENSOR_FOV_DEG = 20
+        self.NUM_RAYS = self.NUM_SENSORS* self.NUM_RAYS_PER_SENSOR
+        self.RAY_LEN_M = 11
+        self.ROV = 9.96
         # self.RAYS_INFO = np.zeros((self.NUM_RAYS, 5))
+
+        # Tracks consecutive static actions (used in reward function)
+        self.static_action_counter = 0
         
         self.reset()
 
@@ -116,7 +120,9 @@ class BaseRouting(object):
         A general use counter is set to zero.
 
         """
+        self.static_action_counter = 0
         self.GLOBAL_PATH = np.array([])
+        self.CURRENT_PATH = np.array([])
         self.route_counter = 0
 
     ################################################################################
@@ -154,32 +160,18 @@ class BaseRouting(object):
         self._processDetection(obstacle_data)
         
         return self.computeRoute(route_timestep=route_timestep,
-                                   cur_pos=state[0:3],
-                                   cur_quat=state[3:7],
-                                   cur_rpy_rad=state[7:10],
-                                   cur_vel=state[10:13],
-                                   cur_ang_vel=state[13:16],
-                                   home_pos = home_pos,
-                                   target_pos=target_pos,
-                                   speed_limit = speed_limit,
-                                   obstacle_data = self.DETECTED_OBS_DATA,
-                                   drone_ids = drone_ids
-                                   )
+                                cur_pos=state[0:3],
+                                target_pos = target_pos,
+                                obstacle_data = self.DETECTED_OBS_DATA,
+                                )
 
     ################################################################################
 
     def computeRoute(self,
                      route_timestep,
                      cur_pos,
-                     cur_quat,
-                     cur_rpy_rad,
-                     cur_vel,
-                     cur_ang_vel,
-                     home_pos,
                      target_pos,
-                     speed_limit,
                      obstacle_data,
-                     drone_ids
                      ):
         """Abstract method to compute the route for a single drone.
 
@@ -214,16 +206,27 @@ class BaseRouting(object):
     ################################################################################
 
     def _plotRoute(self, path):
-        if self.DRONE_ID==0:
-            pathColor = [0, 0, 1]
-        else:
-            pathColor = [0.5,0.5,0.6]
-        # if self.DRONE_ID ==0:
-        #     p.removeAllUserDebugItems()
-        stepper = 1  # 1
-        for i in range(0, path.shape[1]-stepper, stepper):
-            p.addUserDebugLine(path[:,i], path[:,i+stepper], pathColor, lineWidth=5, lifeTime=0.05)
-            # p.addUserDebugLine(path[:,i], path[:,i+1], pathColor, lineWidth=5)
+        pathColor = [0.5, 0.5, 0.6]
+
+        stepper = 1
+        for i in range(0, path.shape[1] - stepper, stepper):
+            p.addUserDebugLine(path[:, i], path[:, i + stepper], pathColor, lineWidth=5, lifeTime=0.05)
+
+        # --- Plot Drone's Heading Direction ---
+        dronePos = self.CUR_POS
+        droneYaw = self.CUR_RPY[2]  # assuming [roll, pitch, yaw]
+
+        # heading vector (in XY plane, length 1.0)
+        headingLen = 3.0
+        hx = headingLen * np.cos(droneYaw)
+        hy = headingLen * np.sin(droneYaw)
+
+        start = dronePos
+        end = [dronePos[0] + hx, dronePos[1] + hy, dronePos[2]]
+
+        # Draw heading line (black arrow)
+        # p.addUserDebugLine(start, end, [0, 0, 0], lineWidth=3, lifeTime=0.05)
+
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
         """Sets the coefficients of the IFDS path planning algorithm.
@@ -332,6 +335,7 @@ class BaseRouting(object):
             self.STAT[0] = RouteStatus.GLOBAL
             self.SIM_MODE = 2
             self.PATH_OPTION = self.COMMANDS[0]._value
+            self.setCurrentRoute(self.GLOBAL_PATH)
         elif self.COMMANDS[0]._name == RouteCommandFlag.FOLLOW_LOCAL.value:
             self.STAT[0] = RouteStatus.LOCAL
             self.SIM_MODE = 1
@@ -426,6 +430,15 @@ class BaseRouting(object):
         """
         self.GLOBAL_PATH = route
         # print("Setting a global route")
+
+    def setCurrentRoute(self, route):
+        """Store current route
+        Parmaters
+        ---------
+        route : ndarray
+            (3,N)-shaped array of floats containing the current route
+        """
+        self.CURRENT_PATH = route
     
     ################################################################################
     
@@ -446,48 +459,44 @@ class BaseRouting(object):
             None.
 
         """
+        # rayHitColor = [0, 1, 0]
+        rayHitColor = [0,1,0]
+        # rayMissColor = [1, 1, 0.1]  # yellow
+        rayMissColor = [0, 0.8, 0]  # green
+        replaceLines = False
         # rayFrom = self.CUR_POS
         # p.removeAllUserDebugItems()
 
         detected_obs_ids = []
         rayTo = []
         rayIds = []
-        # numRays = 1024
-        # numRays = 100
-        numRays = self.NUM_RAYS
-        rayLen = self.RAY_LEN_M
-        # rayLen = 4
-        rayHitColor = [0, 1, 0]
+        rayFrom = [self.CUR_POS for _ in range(self.NUM_RAYS)]
         
-        rayMissColor = [0, 1, 0]
-
-        replaceLines = False
-
-        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
-        indices = np.arange(0, numRays, dtype=float) + 0.5
-
-
-        phi = np.arccos(1 - 2*indices/numRays)
-        theta = np.pi * (1 + 5**0.5) * indices
-
-        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi)
-        rayFrom = [self.CUR_POS for _ in range(numRays)]
-        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
-        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
-        results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
+        
 
         # -- number of rays : check from len(results)
         # -- results is a tuple of tuples
+        # ******** Select the Lidar shape *****************
+        # rayTo = self._RayCast_Sphere(rayFrom)
+        # rayTo = self._RayCast_Circle(rayFrom)
+        rayTo = self._RayCast_Circle_FoV(rayFrom)
+        results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
+        # *************************************************
         self.RAYS_INFO = self._extractRayInfo(results)
+
+        self.SECTOR_INFO = self._extractSectorInfo(results, n_sectors=8, plot_edges=True)
+
+        min_detect_ratio = self.ROV / self.RAY_LEN_M
         
         # if (not replaceLines):
         # p.removeAllUserDebugItems()
-        for i in range(numRays):
+        for i in range(self.NUM_RAYS):
             hitObjectUid = results[i][0]
             
             if (hitObjectUid < 0):
                 hitPosition = [float('inf'), float('inf'), float('inf')]
-                # p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, replaceItemUniqueId=rayIds[i], lifeTime=0.1)
+                # if self.DRONE_ID == 0:
+                #     p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, lifeTime=0.02, lineWidth=2)
             else:
                 # This case, no detection of other fellow UAVs
                 detectOtherUAV = 1
@@ -503,14 +512,98 @@ class BaseRouting(object):
                     detected_obs_ids.append(hitObjectUid) if hitObjectUid not in detected_obs_ids and hitObjectUid != 0 else detected_obs_ids
                     hitPosition = results[i][3]
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, replaceItemUniqueId=rayIds[i])
-                    
                     # p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=1)
-                    if self.DRONE_ID == 0:
-                        if self.RAYS_INFO[i,1] < 0.2:
-                            rayHitColor = [1, 0, 0]
-                        p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
+
+                    # if self.DRONE_ID == 0:
+                    #     if self.RAYS_INFO[i,1] < 0.2:
+                    #         rayHitColor = [1, 0, 0]
+                    #     p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
+                    obj_dist = np.linalg.norm(rayFrom[i] -self.RAYS_INFO[i,0:3])
+                    if obj_dist < self.ROV:
+                        # Plot red rays if drones intrude other's Operational Volume Radius
+                        rayHitColor = [1, 0, 0]
+
+                    p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
+
+    def _RayCast_Sphere(self, rayFrom):
+        numRays = self.NUM_RAYS
+        rayLen = self.RAY_LEN_M
+        # sunflower on a sphere: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/44164075#44164075
+        indices = np.arange(0, numRays, dtype=float) + 0.5
+
+        phi = np.arccos(1 - 2*indices/numRays)
+        theta = np.pi * (1 + 5**0.5) * indices
+
+        x, y, z = rayLen* np.cos(theta) * np.sin(phi), rayLen* np.sin(theta) * np.sin(phi), rayLen*np.cos(phi)
+        rayTo = [[self.CUR_POS[0]+x[i], self.CUR_POS[1]+y[i], self.CUR_POS[2]+z[i]] for i in range(numRays)]
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        
+        return rayTo
+    
+    def _RayCast_Circle(self, rayFrom):
+        numRays = self.NUM_RAYS
+        rayLen = self.RAY_LEN_M
+        rayTo = []
+
+        blindspot_angle_deg = 0 # Angle of blind spot behind the vehicle (0 = no blind spot)
+        ray_swept_angle_deg = 90-blindspot_angle_deg/2  
+        start_angle = -(ray_swept_angle_deg) * np.pi/180  
+        end_angle =  (180 + ray_swept_angle_deg) * np.pi/180 
+        angle_range = end_angle - start_angle
+
+        for i in range(numRays):
+            angle = start_angle + angle_range * i / (numRays - 1)
+            rayTo.append([
+                self.CUR_POS[0] + rayLen * np.cos(angle),
+                self.CUR_POS[1] + rayLen * np.sin(angle),
+                self.CUR_POS[2]
+            ])
+        # rayIds = [p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor) for i in range(numRays)]
+        return rayTo
+    
+    
+    def _RayCast_Circle_FoV(self, rayFrom):
+        numSensors = self.NUM_SENSORS
+        raysPerSensor = self.NUM_RAYS_PER_SENSOR      # rays per sensor
+        fov = self.SENSOR_FOV_DEG * np.pi/180  # FoV per sensor in radians
+        rayLen = self.RAY_LEN_M
+        rayTo = []
+        rayAngleList = []
+        cur_rpy = self.CUR_RPY 
+        droneYaw = cur_rpy[2]  # assuming Z is yaw
+
+        # Drone position
+        sx, sy, sz = self.CUR_POS
+
+        # Generate sensors
+        for s in range(numSensors):
+            # Sensor yaw (rotated evenly around circle, aligned with droneYaw)
+            sensorAngle = 2 * np.pi * s / numSensors
+            sensorYaw = sensorAngle + droneYaw
+
+            # Rays within FoV (spread around sensor direction)
+            for r in range(raysPerSensor):
+                offset = -fov / 2 + fov * (r / (raysPerSensor - 1))
+                rayAngle = sensorYaw + offset
+
+                dx = rayLen * np.cos(rayAngle)
+                dy = rayLen * np.sin(rayAngle)
+                dz = 0
+                toPoint = [sx + dx, sy + dy, sz + dz]
+
+                rayAngleList.append(rayAngle)
+                rayTo.append(toPoint)
+
+        # Wrap all ray angles once at the end
+        self.RAY_ANGLES = (np.array(rayAngleList) + np.pi) % (2 * np.pi) - np.pi
+
+        return rayTo
+
+
+    
+
 
     ################################################################################
     def _extractRayInfo(self, rayResult):
@@ -520,20 +613,125 @@ class BaseRouting(object):
         Args:
             rayResult (tuple): tuple of tuples of raytest query returned from rayTestBatch
                 The rayResult should have the dimension of 5 x (number of rays)
+                which include (objectUniqueId, linkIndex, hit fraction, hit position, hit normal)
 
         Returns:
-            array (5 x Number of rays, 1)
+            array 
                 Extracted information consisting of [hit_ids, hit_fraction, hit_pos_x, hit_pos_y, hit_pos_z] per ray
         """
 
         tempList = []
         for result in rayResult:
-            hit_ids = result[0]
-            hit_fraction = result[2]
-            hit_pos = result[3]
-            tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
+            hit_ids = result[0]  # -1 if no hit, positive integer if hit
+            hit_fraction = result[2]  # range [0, 1] along the ray
+            hit_pos = result[3]   # vec3, list of 3 floats (hit position in Cartesian world coordinate)
+            # tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
+            tempList.extend(( hit_pos[0], hit_pos[1], hit_pos[2] ))
         
-        return np.array(tempList).reshape(self.NUM_RAYS, 5)
+        # return np.array(tempList).reshape(self.NUM_RAYS, 5)
+        return np.array(tempList).reshape(self.NUM_RAYS, 3)
+
+    def _extractSectorInfo(self, rayResult, n_sectors=8, plot_edges=True):
+        """
+        Extract sector-based features (min_range, mean_range, hit_fraction) from batch ray-casting.
+        Also plots sector edges for debugging if plot_edges=True.
+        """
+        max_range = self.RAY_LEN_M
+        droneYaw = self.CUR_RPY[2]
+        agent_x, agent_y, agent_z = self.CUR_POS
+
+        NUM_RAYS = len(rayResult)
+
+        # Initialize arrays
+        ranges = np.zeros(NUM_RAYS, dtype=float)
+        angles = np.zeros(NUM_RAYS, dtype=float)
+        mask = np.zeros(NUM_RAYS, dtype=int)
+
+        # Compute ranges and angles relative to drone
+        for i, result in enumerate(rayResult):
+            hit_id = result[0]
+            hit_fraction = result[2]
+            hit_pos = np.array(result[3])
+
+            mask[i] = hit_id >= 0
+            ranges[i] = hit_fraction * max_range
+            angles[i] = self.RAY_ANGLES[i]   # precomputed ray angles
+
+        # Sector edges (relative to drone yaw)
+        sector_edges = np.linspace(-np.pi, np.pi, n_sectors + 1) - np.pi / n_sectors
+
+        
+
+        # Human-readable labels
+        # if n_sectors == 8:
+        #     sector_labels = [
+        #         'front-right','front', 'front-left','left', 'back-left', 'back', 'back-right', 'right'
+        #     ]
+        # else:
+        sector_labels = [f'sector_{i}' for i in range(n_sectors)]
+
+        features = []
+        # Compute features per sector
+        for j in range(n_sectors):
+            a0, a1 = sector_edges[j], sector_edges[j + 1]
+            if j==0:
+                in_sector = (angles >= sector_edges[n_sectors]) | (angles < sector_edges[j+1])
+            else:
+                in_sector = (angles >= a0) & (angles < a1)
+            beams_in_sector = in_sector.sum()
+
+            if beams_in_sector == 0:
+                features.extend([1.0, 1.0, 0.0])
+                continue
+
+            valid_idx = in_sector & (mask.astype(bool))
+            cnt_hits = valid_idx.sum()
+            hit_density_sector = cnt_hits / beams_in_sector
+            # print(f"Sector '{j}': total beams={beams_in_sector}")
+            if cnt_hits > 0:
+                rsec = ranges[valid_idx]
+                rmin = rsec.min() / max_range
+                rmean = rsec.mean() / max_range
+                # if self.DRONE_ID == 0:
+                #     print(f"Sector '{sector_labels[j]}' has {cnt_hits} hit(s): min={rmin:.2f}, mean={rmean:.2f}, fraction={hit_density_sector:.2f}")
+            else:
+                rmin = 1.0
+                rmean = 1.0
+
+            features.extend([rmin, rmean, hit_density_sector])
+
+            # -----------------  DEBUG PLOTTING SPECIFIC SECTOR -----------------
+            # plot_sector_id = 7
+            # if self.DRONE_ID == 0:
+            #     if plot_sector_id is not None and j == plot_sector_id:
+            #         edge_color = [0, 0, 0]  # black edges
+            #         ray_color = [1, 0, 0]   # red rays
+            #         edge_len = max_range * 0.8
+
+            #         # Plot sector edges
+            #         for angle in [a0, a1]:
+            #             world_angle = droneYaw + angle
+            #             ex = agent_x + edge_len * np.cos(world_angle)
+            #             ey = agent_y + edge_len * np.sin(world_angle)
+            #             ez = agent_z
+            #             p.addUserDebugLine([agent_x, agent_y, agent_z],
+            #                             [ex, ey, ez],
+            #                             edge_color, lineWidth=2, lifeTime=0.1)
+
+            #         # Plot rays inside this sector
+            #         for i in np.where(in_sector)[0]:
+            #             world_angle = droneYaw + angles[i]
+            #             ex = agent_x + max_range * np.cos(world_angle)
+            #             ey = agent_y + max_range * np.sin(world_angle)
+            #             ez = agent_z
+            #             p.addUserDebugLine([agent_x, agent_y, agent_z],
+            #                             [ex, ey, ez],
+            #                             ray_color, lineWidth=1, lifeTime=0.1)
+
+        return np.array(features, dtype=float)
+
+
+
     
     def _processDetection(self, obstacle_data):
         """
@@ -583,7 +781,3 @@ class BaseRouting(object):
         waypoints = waypoints[:, 2:]  # Shape becomes (3, num_waypoints)
 
         return waypoints
-
-
-
-
