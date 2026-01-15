@@ -12,8 +12,6 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
     def __init__(self,
                  drone_model: DroneModel=DroneModel.CF2X,
                  num_drones: int=1,
-                 initial_xyzs=None,
-                 initial_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
                  ctrl_freq: int = 240,
@@ -51,11 +49,9 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
 
         """
         # self.TARGET_POS = np.array([0.2, 8, 1])
-        self.EPISODE_LEN_SEC = 20
+        self.EPISODE_LEN_SEC = 300
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
-                         initial_xyzs=initial_xyzs,
-                         initial_rpys=initial_rpys,
                          physics=physics,
                          pyb_freq=pyb_freq,
                          ctrl_freq=ctrl_freq,
