@@ -206,26 +206,14 @@ class BaseRouting(object):
     ################################################################################
 
     def _plotRoute(self, path):
-        pathColor = [0.5, 0.5, 0.6]
+        if self.DRONE_ID == 0:
+            pathColor = [0.1, 0.1, 1]
+        else:
+            pathColor = [0.5, 0.5, 0.6]
 
         stepper = 1
         for i in range(0, path.shape[1] - stepper, stepper):
             p.addUserDebugLine(path[:, i], path[:, i + stepper], pathColor, lineWidth=5, lifeTime=0.05)
-
-        # --- Plot Drone's Heading Direction ---
-        dronePos = self.CUR_POS
-        droneYaw = self.CUR_RPY[2]  # assuming [roll, pitch, yaw]
-
-        # heading vector (in XY plane, length 1.0)
-        headingLen = 3.0
-        hx = headingLen * np.cos(droneYaw)
-        hy = headingLen * np.sin(droneYaw)
-
-        start = dronePos
-        end = [dronePos[0] + hx, dronePos[1] + hy, dronePos[2]]
-
-        # Draw heading line (black arrow)
-        # p.addUserDebugLine(start, end, [0, 0, 0], lineWidth=3, lifeTime=0.05)
 
 
     def setIFDSCoefficients(self, rho0_ifds=None, sigma0_ifds=None, sf_ifds=None):
