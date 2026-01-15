@@ -10,7 +10,7 @@ In a terminal, run as:
     $ python pid.py
 
 Notes
------
+-----g
 The drones move, at different altitudes, along cicular trajectories 
 in the X-Y plane, around point (0, -.3).
 
@@ -18,28 +18,39 @@ in the X-Y plane, around point (0, -.3).
 import os
 import time
 import argparse
-from datetime import datetime
-import pdb
-import math
 import random
 import numpy as np
 import pybullet as p
 import matplotlib.pyplot as plt
+import itertools
 import random
 
 
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
-from gym_pybullet_drones.envs.RoutingAviary import RoutingAviary
 from gym_pybullet_drones.envs.AutoroutingRLAviary import AutoroutingRLAviary
 from gym_pybullet_drones.envs.AutoroutingSARLAviary import AutoroutingSARLAviary
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
 from gym_pybullet_drones.utils.Logger import Logger
 from gym_pybullet_drones.utils.utils import sync, str2bool
-from gym_pybullet_drones.routing.BaseRouting import RouteCommandFlag, SpeedCommandFlag, SpeedStatus
-from gym_pybullet_drones.routing.IFDSRoute import IFDSRoute
 
-DEFAULT_DRONES = DroneModel("cf2x")
+def draw_circle_around_drone(center, radius=1.0, color=[0, 1, 0], segments=36, z_offset=0.05):
+    """Draw a circle around a given center position (drone) in the XY plane."""
+    circle_lines = []
+    theta = np.linspace(0, 2 * np.pi, segments + 1)
+    for i in range(segments):
+        x1 = center[0] + radius * np.cos(theta[i])
+        y1 = center[1] + radius * np.sin(theta[i])
+        z1 = center[2] + z_offset
+
+        x2 = center[0] + radius * np.cos(theta[i + 1])
+        y2 = center[1] + radius * np.sin(theta[i + 1])
+        z2 = center[2] + z_offset
+
+        line_id = p.addUserDebugLine([x1, y1, z1], [x2, y2, z2], color, lineWidth=1)
+        circle_lines.append(line_id)
+    return circle_lines
+
+DEFAULT_DRONES = DroneModel("hb")
 DEFAULT_NUM_DRONES = 5
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
@@ -47,8 +58,8 @@ DEFAULT_RECORD_VISION = False
 DEFAULT_PLOT = False
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
-DEFAULT_SIMULATION_FREQ_HZ = 240
-DEFAULT_CONTROL_FREQ_HZ = 48
+DEFAULT_SIMULATION_FREQ_HZ = 60
+DEFAULT_CONTROL_FREQ_HZ = 60
 DEFAULT_DURATION_SEC = 20
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
@@ -72,55 +83,11 @@ def run(
     H = .1
     H_STEP = .05
     R = .3
-    # INIT_XYZS = np.array([[R*np.cos((i/6)*2*np.pi+np.pi/2), R*np.sin((i/6)*2*np.pi+np.pi/2)-R, H+i*H_STEP] for i in range(num_drones)])
-    INIT_XYZS = np.array([[((-1)**i)*(i*0.2)+0.5,-3*(i*0.05), 1.3+ 0.05*i ] for i in range(ARGS.num_drones)])
-    INIT_RPYS = np.array([[0, 0,  i * (np.pi/2)/num_drones] for i in range(num_drones)])
 
     #### Create the environment ################################
-    # env = CtrlAviary(drone_model=drone,
-    #                     num_drones=num_drones,
-    #                     initial_xyzs=INIT_XYZS,
-    #                     initial_rpys=INIT_RPYS,
-    #                     physics=physics,
-    #                     neighbourhood_radius=10,
-    #                     pyb_freq=simulation_freq_hz,
-    #                     ctrl_freq=control_freq_hz,
-    #                     gui=gui,
-    #                     record=record_video,
-    #                     obstacles=obstacles,
-    #                     user_debug_gui=user_debug_gui
-    #                     )
-    
-    # env = RoutingAviary(drone_model=drone,
-    #                      num_drones=num_drones,
-    #                      initial_xyzs=INIT_XYZS,
-    #                      initial_rpys=INIT_RPYS,
-    #                      physics=physics,
-    #                      neighbourhood_radius=10,
-    #                      pyb_freq=simulation_freq_hz,
-    #                      ctrl_freq=control_freq_hz,
-    #                      gui=gui,
-    #                      record=record_video,
-    #                      obstacles=obstacles,
-    #                      user_debug_gui=user_debug_gui
-    #                      )
-    
-    # env = AutoroutingRLAviary(
-    #              drone_model = drone,
-    #              num_drones = DEFAULT_NUM_DRONES, 
-    #              initial_xyzs=INIT_XYZS,
-    #              initial_rpys=INIT_RPYS,
-    #              physics= physics,
-    #              pyb_freq=simulation_freq_hz,
-    #              ctrl_freq=control_freq_hz,
-    #              gui=gui,
-    #              record=record_video,
-    #              )
     env = AutoroutingSARLAviary(
                  drone_model = drone,
                  num_drones = DEFAULT_NUM_DRONES, 
-                 initial_xyzs=INIT_XYZS,
-                 initial_rpys=INIT_RPYS,
                  physics= physics,
                  pyb_freq=simulation_freq_hz,
                  ctrl_freq=control_freq_hz,
@@ -130,6 +97,7 @@ def run(
 
     #### Obtain the PyBullet Client ID from the environment ####
     PYB_CLIENT = env.getPyBulletClient()
+    NUM_DRONES = ARGS.num_drones
 
     #### Initialize the logger #################################
     # logger = Logger(logging_freq_hz=control_freq_hz,
@@ -138,45 +106,126 @@ def run(
     #                 colab=colab
     #                 )
 
-    #### Initialize the controllers ############################
-    if drone in [DroneModel.CF2X, DroneModel.CF2P]:
-        ctrl = [DSLPIDControl(drone_model=drone) for i in range(num_drones)]
-        
-    #++++ Initialize Routing +++++++++++++++++++++++++++++++++++
-    routing = [IFDSRoute(drone_model=drone, drone_id=i) for i in range(num_drones)]
-    routeCounter = 1
-
     #### Run the simulation ####################################
     # action = np.zeros((num_drones,4))
     
     for _ in range(20):
         epEnd = False
-        i = 0
+        count = 0
         START = time.time()
         env.reset()
-        # for j in range(num_drones):
-        #     env.routing[j].reset()
+        SAFE_DISTANCE = 5.0  # meters
+        debug_items = []     # store current debug visuals
+        min_dists = []       # store history if you want to plot later
+        # Ground fixed camera
+        # p.resetDebugVisualizerCamera(cameraDistance=35, cameraYaw=0, cameraPitch=-60, cameraTargetPosition=[0,0,0])
         while not epEnd:
-
-            #### Make it rain rubber ducks #############################
-            # if i/env.SIM_FREQ>5 and i%10==0 and i/env.SIM_FREQ<10: p.loadURDF("duck_vhacd.urdf", [0+random.gauss(0, 0.3),-0.5+random.gauss(0, 0.3),3], p.getQuaternionFromEuler([random.randint(0,360),random.randint(0,360),random.randint(0,360)]), physicsClientId=PYB_CLIENT)
+            count += 1
             # ======Random Action!!=========
-            action = random.randint(0, 10)
-            # action = 4
-            # if i<80:
-            #     action = 2
-            # else:
-            #     print(f"\nDecelerating!!!!!\n")
-            #     action = 1
-            # action = 0
-            # action = 1
+            # action = random.randint(0, 2)
+            if count >= 4*simulation_freq_hz and count < 10*simulation_freq_hz:
+                action = 1
+                # print(f"<<<< braking")
+            else:
+                action = 0
 
             #### Step the simulation ###################################
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
+                print(f"========== EPISODE ENDED ==============")
                 epEnd = True
-            # print(f"obs len = {len(obs[0])}")
-            print(f"truncated = {truncated}")
+            # Clear previous debug items
+            p.removeAllUserDebugItems
+            for item in debug_items:
+                p.removeUserDebugItem(item)
+            debug_items = []
+            min_dists_all = []   # optional history logging 
+            # Drone's 1 following camera
+            p.resetDebugVisualizerCamera(cameraDistance=35, cameraYaw=0, cameraPitch=-60, cameraTargetPosition=env.routing[0].CUR_POS)
+
+            positions = [p.getBasePositionAndOrientation(env.DRONE_IDS[i])[0]
+                        for i in range(ARGS.num_drones)]
+            
+            # === Compute pairwise distances ===
+            dist_matrix = np.full((NUM_DRONES, NUM_DRONES), np.inf)
+            for i, j in itertools.combinations(range(NUM_DRONES), 2):
+                dist = np.linalg.norm(np.array(positions[i]) - np.array(positions[j]))  # works now ✅
+                dist_matrix[i, j] = dist_matrix[j, i] = dist
+
+                # Draw color-coded line
+                color = [1, 0, 0] if dist < SAFE_DISTANCE else [0, 1, 0]
+                # debug_items.append(p.addUserDebugLine(positions[i], positions[j], color, lineWidth=2))
+
+            # === Compute and display per-drone min separation ===
+            per_drone_min = np.min(dist_matrix, axis=1)
+            min_dists_all.append(per_drone_min)
+
+            for i in range(1):
+                min_d = per_drone_min[i]
+                text_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                debug_items.append(
+                    p.addUserDebugText(
+                        f"{min_d:.2f} m",
+                        [0, 0, 0.2],  # small offset above the drone
+                        textColorRGB=text_color,
+                        textSize=1.2,
+                        parentObjectUniqueId=env.DRONE_IDS[i]
+                    )
+                )
+                # Display Action took by agents
+                # act = action[i]
+                # action_label = ACTION_LABELS.get(act, f"Action {act}")
+                # debug_items.append(
+                #     p.addUserDebugText(
+                #         f"{action_label}",
+                #         [0, 0, 2.5],  # stacked above the distance text
+                #         textColorRGB=[0.2, 0.8, 1.0],  # light blue
+                #         textSize=1.1,
+                #         parentObjectUniqueId=env.DRONE_IDS[i]
+                #     )
+                # )
+
+
+             # Draw a circle around each drone
+                circle_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                inner_color = [1, 0, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                circle_ids = draw_circle_around_drone(
+                    center=positions[i],
+                    radius=SAFE_DISTANCE,
+                    color=circle_color,
+                    segments=36,
+                    z_offset=0.05
+                )
+                circle_inner_ids = draw_circle_around_drone(
+                    center=positions[i],
+                    radius=SAFE_DISTANCE-2,
+                    color=[0, 1, 0],
+                    segments=36,
+                    z_offset=0.05
+                )
+                debug_items.extend(circle_ids)
+                debug_items.extend(circle_inner_ids)
+            # === Compute global minimum separation ===
+            global_min_dist = np.min(dist_matrix)
+
+            # === Display global stats at fixed location ===
+            # For example, top-left of the scene: x=-5, y=-5, z=5
+            debug_items.append(
+                p.addUserDebugText(
+                    f"Global min separation: {global_min_dist:.2f} m",
+                    [-35, 25, 5],
+                    textColorRGB=[1, 1, 1],  # white text
+                    textSize=1.5
+                )
+            )
+            debug_items.append(
+                p.addUserDebugText(
+                    f"Timestep: {count}",
+                    [-35, 20, 5],  # slightly below the first text
+                    textColorRGB=[1, 1, 0],  # yellow
+                    textSize=1.5
+                )
+            )
             
             #### Log the simulation ####################################
             # for j in range(num_drones):
