@@ -200,7 +200,7 @@ class DuelingDDQN():
     def evaluate(self, eval_policy_model, eval_env, n_episodes=1):
         rs = []
         for ep_eval in range(n_episodes):
-            print(f"+++++ Evaluating - ep.{ep_eval}")
+            # print(f"+++++ Evaluating - ep.{ep_eval}")
             # s, d = eval_env.reset(), False
             s, info = eval_env.reset(seed = self.seed)
             d = False

@@ -7,7 +7,7 @@ from gym_pybullet_drones.drl_custom.networks.FCQ import FCQ
 from gym_pybullet_drones.drl_custom.exploration_strategies import EGreedyExpStrategy, GreedyStrategy
 from gym_pybullet_drones.drl_custom.utils import get_make_env_fn
 
-from gym_pybullet_drones.drl_custom.DQN import DQN
+from gym_pybullet_drones.drl_custom.value_based_DRL.DQN import DQN
 from gym_pybullet_drones.drl_custom.replay_buffers.ReplayBuffer import ReplayBuffer
 
 

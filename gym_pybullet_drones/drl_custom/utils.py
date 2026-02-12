@@ -1,6 +1,6 @@
 from gym_pybullet_drones.drl_custom.drl_imports import tempfile, gym, wrappers, np, base64, json, os, subprocess, io
 from gymnasium.wrappers import RecordVideo
-from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics
+from gym_pybullet_drones.utils.enums import ObservationType, ActionType, Physics, DroneModel
 from gym_pybullet_drones.routing.RouteMission import RouteMission
 def get_make_env_fn(**kargs):
     def make_env_fn(env_name, seed=None, render=None, record=False,
@@ -8,22 +8,14 @@ def get_make_env_fn(**kargs):
                     inner_wrappers=None, outer_wrappers=None,
                     num_drones=1):
         
+        DEFAULT_DRONES = DroneModel("hb")
         DEFAULT_OBS = ObservationType('kin') # 'kin' or 'rgb'
         DEFAULT_ACT = ActionType('autorouting') # 'rpm' or 'pid' or 'vel' or 'one_d_rpm' or 'one_d_pid'
         DEFAULT_AGENTS = num_drones
         DEFAULT_PHYSICS = Physics("pyb")
-        DEFAULT_CONTROL_FREQ_HZ = 60
-        DEFAULT_SIMULATION_FREQ_HZ = 60
-        DEFAULT_SCENARIO = 2
+        DEFAULT_CONTROL_FREQ_HZ = 30
+        DEFAULT_SIMULATION_FREQ_HZ = 30
 
-        MISSION = RouteMission()
-        # MISSION.generateMission(numDrones=num_drones,scenario=DEFAULT_SCENARIO)
-        MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
-        # MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones, seed = seed)
-        INIT_XYZS = MISSION.INIT_XYZS
-        INIT_RPYS = MISSION.INIT_RPYS
-        DESTINS = MISSION.DESTINS
-        print(f"NUM_DRONES = {MISSION.NUM_DRONES}")
         mdir = tempfile.mkdtemp()
         env = None
         if render:
@@ -32,37 +24,23 @@ def get_make_env_fn(**kargs):
                 # env = gym.make(env_name, render_mode="rgb_array")
                 env = gym.make(env_name, gui=True, obs=DEFAULT_OBS, 
                                                  act=DEFAULT_ACT, 
+                                                 drone_model = DEFAULT_DRONES,
                                                  physics=DEFAULT_PHYSICS, 
                                                  ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
-                                                 initial_xyzs=INIT_XYZS,
-                                                 initial_rpys=INIT_RPYS,
-                                                 num_drones = MISSION.NUM_DRONES)
+                                                 num_drones = DEFAULT_AGENTS)
                 # env.render()
             except:
                 pass
         if env is None:
             print("*** env is None")
-            DEFAULT_GUI = True
-            DEFAULT_RECORD_VIDEO = False
-            DEFAULT_OUTPUT_FOLDER = 'results'
-            DEFAULT_COLAB = False
-
-            
             env = gym.make(env_name, gui=False, obs=DEFAULT_OBS, 
                                                  act=DEFAULT_ACT, 
+                                                 drone_model = DEFAULT_DRONES,
                                                  physics=DEFAULT_PHYSICS, 
                                                  ctrl_freq = DEFAULT_CONTROL_FREQ_HZ, 
                                                  pyb_freq = DEFAULT_SIMULATION_FREQ_HZ,
-                                                 initial_xyzs=INIT_XYZS,
-                                                 initial_rpys=INIT_RPYS,
-                                                 num_drones= MISSION.NUM_DRONES)
-        # by Komsun
-        for j in range(MISSION.NUM_DRONES):
-            env.routing[j].CUR_POS = INIT_XYZS[j,:]
-            env.routing[j].HOME_POS = INIT_XYZS[j,:]
-            env.routing[j].DESTINATION = DESTINS[j,:]
-        
+                                                 num_drones= DEFAULT_AGENTS)        
         # if seed is not None: env.seed(seed)
         if seed is not None:
             _, _ = env.reset(seed=seed)

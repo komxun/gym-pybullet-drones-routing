@@ -13,16 +13,16 @@ class RouteMission:
         self.WAYPOINTS = []
 
     def generateRandomMission(self, maxNumDrone, minNumDrone=1, seed=None,
-                               min_distance=10.0, max_attempts=100, min_travel_distance=8):
+                               min_distance=20.0, max_attempts=100, min_travel_distance=40):
         """Generate a random mission with drones spaced apart and traveling a minimum distance."""
         self._validate_random_mission_inputs(minNumDrone, maxNumDrone, seed, min_travel_distance)
 
         ORIGIN = [0, 0, 5]
-        BASE_R  = 30  #30
-        BASE_R_D = 25  #25
+        BASE_R  = 60  #30
+        BASE_R_D = 50  #25
         H_STEP = 0
         RADIUS_VARIATION = 0.5
-        ANGLE_VARIATION = np.pi / 4  # 45 deg
+        ANGLE_VARIATION = np.pi / 2  # 45 deg
         Z_VARIATION = 0
 
         while True:

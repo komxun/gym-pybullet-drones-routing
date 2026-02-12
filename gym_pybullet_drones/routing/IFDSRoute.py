@@ -32,7 +32,7 @@ class IFDSRoute(BaseRouting):
         self.SIGMA0_IFDS = 2
         self.ALPHA = 0
         self.SF_IFDS = 0
-        self.TARGET_THRESH = 1
+        self.TARGET_THRESH = 0.5
         self.SIM_MODE = 2
         self.DT = 0.5  # 0.1  #0.5
         self.TSIM = 10
@@ -231,6 +231,8 @@ class IFDSRoute(BaseRouting):
         curSpeed = min(np.linalg.norm(self.CUR_VEL), speed_limit)
         new_speed = curSpeed + acceleration * (self.DT)
         
+        Wi = path[:,0]
+        Wf = path[:,-1]
         if new_speed < 0 :
             k = path.shape[1]-1
             increment = -1

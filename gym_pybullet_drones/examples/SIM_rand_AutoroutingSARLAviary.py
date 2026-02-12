@@ -51,15 +51,15 @@ def draw_circle_around_drone(center, radius=1.0, color=[0, 1, 0], segments=36, z
     return circle_lines
 
 DEFAULT_DRONES = DroneModel("hb")
-DEFAULT_NUM_DRONES = 5
+DEFAULT_NUM_DRONES = 2
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
 DEFAULT_PLOT = False
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
-DEFAULT_SIMULATION_FREQ_HZ = 60
-DEFAULT_CONTROL_FREQ_HZ = 60
+DEFAULT_SIMULATION_FREQ_HZ = 30
+DEFAULT_CONTROL_FREQ_HZ = 30
 DEFAULT_DURATION_SEC = 20
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
@@ -109,12 +109,13 @@ def run(
     #### Run the simulation ####################################
     # action = np.zeros((num_drones,4))
     
-    for _ in range(20):
+    for ep in range(20):
         epEnd = False
         count = 0
         START = time.time()
         env.reset()
-        SAFE_DISTANCE = 5.0  # meters
+        SAFE_DISTANCE = env.routing[0].ROV  # meters
+        FLIGHT_GEO = 2* env.routing[0].SFG/2
         debug_items = []     # store current debug visuals
         min_dists = []       # store history if you want to plot later
         # Ground fixed camera
@@ -123,12 +124,12 @@ def run(
             count += 1
             # ======Random Action!!=========
             # action = random.randint(0, 2)
-            if count >= 4*simulation_freq_hz and count < 10*simulation_freq_hz:
-                action = 1
-                # print(f"<<<< braking")
-            else:
-                action = 0
-
+            # if count >= 4*simulation_freq_hz and count < 10*simulation_freq_hz:
+            #     action = 1
+            #     # print(f"<<<< braking")
+            # else:
+            #     action = 0
+            action = 0
             #### Step the simulation ###################################
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
@@ -162,16 +163,17 @@ def run(
 
             for i in range(1):
                 min_d = per_drone_min[i]
-                text_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
-                debug_items.append(
-                    p.addUserDebugText(
-                        f"{min_d:.2f} m",
-                        [0, 0, 0.2],  # small offset above the drone
-                        textColorRGB=text_color,
-                        textSize=1.2,
-                        parentObjectUniqueId=env.DRONE_IDS[i]
+                if env.routing[0].RAYS_INFO.any():
+                    text_color = [1, 1, 0] if min_d < SAFE_DISTANCE else [0, 1, 0]
+                    debug_items.append(
+                        p.addUserDebugText(
+                            f"{min_d:.2f} m",
+                            [0, 0, 0.2],  # small offset above the drone
+                            textColorRGB=text_color,
+                            textSize=1.2,
+                            parentObjectUniqueId=env.DRONE_IDS[i]
+                        )
                     )
-                )
                 # Display Action took by agents
                 # act = action[i]
                 # action_label = ACTION_LABELS.get(act, f"Action {act}")
@@ -198,7 +200,7 @@ def run(
                 )
                 circle_inner_ids = draw_circle_around_drone(
                     center=positions[i],
-                    radius=SAFE_DISTANCE-2,
+                    radius=FLIGHT_GEO,
                     color=[0, 1, 0],
                     segments=36,
                     z_offset=0.05
@@ -220,7 +222,7 @@ def run(
             )
             debug_items.append(
                 p.addUserDebugText(
-                    f"Timestep: {count}",
+                    f"Episode: {ep}, Timestep: {count}",
                     [-35, 20, 5],  # slightly below the first text
                     textColorRGB=[1, 1, 0],  # yellow
                     textSize=1.5

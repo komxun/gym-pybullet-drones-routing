@@ -76,7 +76,7 @@ class RoutingAviary(BaseAviary):
                           )
         
         #### Set a limit on the maximum target speed ###############
-        speedLimitingFactor = 0.5  #0.1 # 0.03
+        speedLimitingFactor = 1  #0.1 # 0.03
         self.SPEED_LIMIT = speedLimitingFactor * self.MAX_SPEED_KMH * (1000/3600)
         self.CONTACT_POINTS = [() for _ in range(self.NUM_DRONES)]
         self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES, dtype=int)

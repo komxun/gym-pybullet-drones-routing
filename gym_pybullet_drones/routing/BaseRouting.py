@@ -104,8 +104,9 @@ class BaseRouting(object):
         self.NUM_SECTORS = 8
         self.SENSOR_FOV_DEG = 20
         self.NUM_RAYS = self.NUM_SENSORS* self.NUM_RAYS_PER_SENSOR
-        self.RAY_LEN_M = 11
-        self.ROV = 9.96
+        self.RAY_LEN_M =  30# 14
+        self.ROV = 12.77
+        self.SFG = 3
 
         # Tracks consecutive static actions (used in reward function)
         self.static_action_counter = 0
@@ -487,11 +488,12 @@ class BaseRouting(object):
                 if self.DRONE_ID == 0:
                     p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, lifeTime=0.02, lineWidth=2)
             else:
-                # This case, no detection of other fellow UAVs
-                detectOtherUAV = 1
+                # Whether detection of other fellow UAVs is allowed or not
+                detectOtherUAV = True
                 if detectOtherUAV:
                     # hitCondition = hitObjectUid!=0 # ignore the floor
                     hitCondition = hitObjectUid!=0  and hitObjectUid != self.DRONE_ID+1
+                    # hitCondition = hitObjectUid != self.DRONE_ID+1
                 else:
                     # hitCondition = hitObjectUid!=0 and hitObjectUid not in drone_ids
                     hitCondition = hitObjectUid not in drone_ids
@@ -592,7 +594,9 @@ class BaseRouting(object):
 
 
     
-
+    def _wrap_to_pi(angle: float) -> float:
+        """Wrap angle to [-pi, pi]."""
+        return (angle + np.pi) % (2.0 * np.pi) - np.pi
 
     ################################################################################
     def _extractRayInfo(self, rayResult):
@@ -615,45 +619,71 @@ class BaseRouting(object):
             hit_fraction = result[2]  # range [0, 1] along the ray
             hit_pos = result[3]   # vec3, list of 3 floats (hit position in Cartesian world coordinate)
             # tempList.extend((hit_ids, hit_fraction, hit_pos[0], hit_pos[1], hit_pos[2]))
-            tempList.extend(( hit_pos[0], hit_pos[1], hit_pos[2] ))
+            tempList.extend(( hit_fraction, hit_pos[1], hit_pos[2] ))
+            # tempList.extend(( hit_pos[0], hit_pos[1], hit_pos[2] ))
         
         # return np.array(tempList).reshape(self.NUM_RAYS, 5)
         return np.array(tempList).reshape(self.NUM_RAYS, 3)
     
     #########################################################################################################################
-    def _extractSensorInfo(self, rayResult, rays_per_sensor):
+    def _extractSensorInfo(self, rayResult_original, rays_per_sensor):
         """
-        Extract sensor-based features (rmin, rmean, hit_density) from batch ray-casting.
+        Extract sensor-based features (rmin, rmean, hit_density, los_angle) from batch ray-casting.
+
+        los_angle:
+            Relative bearing (horizontal LOS angle) of the closest hit within the sensor
+            w.r.t. drone yaw, normalized to [-1, 1] by dividing by pi.
 
         Each sensor consists of a fixed number of rays (e.g., 13). Rays are assumed
         to be ordered consecutively per sensor.
+
         Args:
-            rayResult (tuple): batch ray-casting result from rayTestBatch
+            rayResult_original (tuple/list): batch ray-casting result from rayTestBatch
             rays_per_sensor (int): number of rays per sensor
 
         Returns:
             np.ndarray:
-                Sensor-based features of shape (num_sensors * 3,)
-                Each sensor contributes [rmin, rmean, hit_density]
+                Sensor-based features of shape (num_sensors * 4,)
+                Each sensor contributes [rmin, rmean, hit_density, los_angle]
         """
+        def _wrap_to_pi(angle: float) -> float:
+            """Wrap angle to [-pi, pi]."""
+            return (angle + np.pi) % (2.0 * np.pi) - np.pi
         max_range = self.RAY_LEN_M
         NUM_RAYS = self.NUM_RAYS
         assert NUM_RAYS % rays_per_sensor == 0, \
             "Number of rays must be divisible by rays_per_sensor"
 
         num_sensors = NUM_RAYS // rays_per_sensor
+        yaw = float(self.CUR_RPY[2])
+
+        # --- Drone position needed for LOS from hit point ---
+        # Change this if your position variable name differs.
+        drone_pos = np.asarray(self.CUR_POS, dtype=float)  # shape (3,)
 
         # Pre-allocate arrays
         ranges = np.zeros(NUM_RAYS, dtype=float)
         mask = np.zeros(NUM_RAYS, dtype=bool)
 
+        # Store per-ray hit positions (only meaningful when mask[i] is True)
+        hit_positions = np.zeros((NUM_RAYS, 3), dtype=float)
+
         # Extract per-ray info
-        for i, result in enumerate(rayResult):
+        # Ray result original: (ObjectID, linkIndex, Hit fraction, (hitx, hity, hitz), (hitnormalx, hitnormaly, hitnormalz))
+        for i, result in enumerate(rayResult_original):
             hit_id = result[0]
             hit_fraction = result[2]
+            hit_pos = result[3]
 
-            mask[i] = hit_id >= 0
+            valid = (hit_id >= 0) and (hit_fraction > 0)
+            mask[i] = valid
+
+            # Range
             ranges[i] = hit_fraction * max_range
+
+            # Hit position (only valid if hit occurred)
+            if valid:
+                hit_positions[i, :] = np.asarray(hit_pos, dtype=float)
 
         features = []
 
@@ -666,18 +696,48 @@ class BaseRouting(object):
             sensor_ranges = ranges[start:end]
 
             beams_in_sensor = rays_per_sensor
-            cnt_hits = sensor_mask.sum()
-            hit_density = cnt_hits / beams_in_sensor
+            cnt_hits = int(sensor_mask.sum())
+            hit_density = cnt_hits / float(beams_in_sensor)
 
             if cnt_hits > 0:
+                # rmin/rmean over valid returns
                 r_valid = sensor_ranges[sensor_mask]
-                rmin = r_valid.min() / max_range
-                rmean = r_valid.mean() / max_range
+                rmin = float(r_valid.min() / max_range)
+                rmean = float(r_valid.mean() / max_range)
+
+                # LOS angle from the closest hit in this sensor
+                hit_local_idx = np.where(sensor_mask)[0]          # indices 0..rays_per_sensor-1
+                hit_ranges_local = sensor_ranges[sensor_mask]
+                k_local = int(hit_local_idx[np.argmin(hit_ranges_local)])
+                k_global = start + k_local
+
+                hit_vec = hit_positions[k_global, :] - drone_pos  # vector from drone to hit
+                bearing_global = float(np.arctan2(hit_vec[1], hit_vec[0]))
+                bearing_rel = _wrap_to_pi(bearing_global - yaw)
+
+                los_angle = bearing_rel / np.pi  # normalize to [-1, 1]
+                
+                #=============== For debugging ==============================
+                # vx, vy = self.CUR_VEL[0], self.CUR_VEL[1]  # or wherever you store velocity
+                # speed_xy = np.hypot(vx, vy)
+                # if speed_xy > 1e-3:
+                #     vel_yaw = np.arctan2(vy, vx)
+                #     bearing_vel_rel = _wrap_to_pi(bearing_global - vel_yaw)
+                #     los_vel = bearing_vel_rel / np.pi
+                # else:
+                #     vel_yaw = None
+                #     los_vel = None
+
+                # print(f"[sensor {s}] yaw={yaw:.3f} vel_yaw={(vel_yaw if vel_yaw is not None else np.nan):.3f} "
+                #     f"bearing_global={bearing_global:.3f} los_yaw={los_angle:.3f} los_vel={(los_vel if los_vel is not None else np.nan):.3f} "
+                #     f"v_xy=({vx:.2f},{vy:.2f})")
+                #============================================================
             else:
                 rmin = 1.0
                 rmean = 1.0
+                los_angle = 0.0  # neutral when no hit
 
-            features.extend([rmin, rmean, hit_density])
+            features.extend([rmin, rmean, hit_density, float(los_angle)])
 
         return np.array(features, dtype=float)
     #########################################################################################################################
@@ -703,7 +763,7 @@ class BaseRouting(object):
             hit_fraction = result[2]
             hit_pos = np.array(result[3])
 
-            mask[i] = hit_id >= 0
+            mask[i] = hit_id >= 0 and hit_fraction > 0
             ranges[i] = hit_fraction * max_range
             angles[i] = self.RAY_ANGLES[i]   # precomputed ray angles
 
