@@ -29,7 +29,11 @@ class ExtendedSARLAviary(RoutingAviary):
                  gui=False,
                  record=False,
                  obs: ObservationType=ObservationType.KIN,
-                 act: ActionType=ActionType.RPM
+                 act: ActionType=ActionType.RPM,
+                 sensor_cfg: dict=None,
+                 action_cfg: dict=None,
+                 skip_drone_raycasting: bool=False,
+                 obs_choice: str="sensor"
                  ):
         """Initialization of a generic single and multi-agent RL environment.
 
@@ -67,6 +71,11 @@ class ExtendedSARLAviary(RoutingAviary):
 
         """
         self.NUM_OTHER_DRONES = num_drones - 1
+        # --- Store config dicts (with defaults) ---
+        _ac = action_cfg or {}
+        self._accel_value = _ac.get('accel_value', 2)
+        self._decel_value = _ac.get('decel_value', -2)
+        self._sensor_cfg = sensor_cfg
         # =============================================================================
         homePos =  np.array([0,0,0.5]) 
         destin  =  np.array([0.2, 10, 1])
@@ -76,7 +85,7 @@ class ExtendedSARLAviary(RoutingAviary):
 
         self.MISSION = RouteMission()
         self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
-        self.OBS_CHOICE = "sensor"  # ray, sensor, sector
+        self.OBS_CHOICE = obs_choice  # ray, sensor, sector
         
         # =============================================================================
 
@@ -96,7 +105,7 @@ class ExtendedSARLAviary(RoutingAviary):
             if drone_model in [DroneModel.CF2X, DroneModel.CF2P, DroneModel.HB]:
                 # self.ctrl = [DSLPIDControl(drone_model=DroneModel.CF2X) for i in range(num_drones_total)]
                 self.ctrl = [PIDVelocityControl(drone_model=drone_model) for i in range(num_drones)]
-                self.routing = [IFDSRoute(drone_model=drone_model, drone_id=i) for i in range(num_drones)]
+                self.routing = [IFDSRoute(drone_model=drone_model, drone_id=i, sensor_cfg=self._sensor_cfg) for i in range(num_drones)]
                 
                 self.INIT_XYZS = self.MISSION.INIT_XYZS
                 self.INIT_RPYS = self.MISSION.INIT_RPYS
@@ -125,7 +134,11 @@ class ExtendedSARLAviary(RoutingAviary):
                          obstacles=True, # Add obstacles for RGB observations and/or FlyThruGate
                          user_debug_gui=False, # Remove of RPM sliders from all single agent learning aviaries
                          vision_attributes=vision_attributes,
+                         skip_drone_raycasting=skip_drone_raycasting,
                          )
+        # Propagate GUI flag to routing objects so they can skip debug drawing
+        for r in self.routing:
+            r._gui = self.GUI
         #### Set a limit on the maximum target speed ###############
 
     ################################################################################
@@ -176,109 +189,72 @@ class ExtendedSARLAviary(RoutingAviary):
         for k in range(self.NUM_DRONES):  # k: num drone
             # Process action based on ACT_TYPE
             state = self._getDroneStateVector(k)
-            if k != 0:
-                # # Looping Home<->Destination
-                # near_destin_m = 15
-                # if np.linalg.norm(self.MISSION.DESTINS[k,:]-state[0:3]) < near_destin_m:
-                    
-                #     if self.routing[k].REACH_DESTIN:
-                #         # self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", -4)  # 0.05
-                #         self.routing[k]._setCommand(SpeedCommandFlag, "hover")
-                        
-                #         tempDestin = self.routing[k].DESTINATION
-                #         tempHome = self.routing[k].HOME_POS
-                #         # self.routing[k].DESTINATION = tempHome
-                #         self.MISSION.DESTINS[k,:] = tempHome
-                #         self.routing[k].HOME_POS = tempDestin
-                #         self.routing[k].route_counter = 0
-                #         self.routing[k].reset()
-                #     else:
-                #         # self.routing[k]._setCommand(SpeedCommandFlag, "hover")
-                #         # self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
-                #         u = np.linalg.norm(self.routing[k].CUR_VEL)
-                #         accel = -(u**2)/(2*near_destin_m)
-                #         print(f"Drone{k}: applying acceleration of {accel}")
-                #         self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 5*accel)
 
-                # else:
-                #     # self.routing[k]._setCommand(SpeedCommandFlag, "constant")
-                    self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
-                    self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)  # 0.05
-
-        
-            #------- Compute route (waypoint) to follow ----------------
-            foundPath, path = self.routing[k].computeRouteFromState(route_timestep=self.routing[k].route_counter, 
-                                                                state = state, 
-                                                                home_pos = self.routing[k].HOME_POS,   # self.HOME_POS
-                                                                target_pos = self.MISSION.DESTINS[k,:],   # routing class takes destination from target_pos. Thus, we have to feed from MISSION class
-                                                                speed_limit = self.SPEED_LIMIT,
-                                                                obstacle_data = self.OBSTACLE_DATA,
-                                                                drone_ids = self.DRONE_IDS
-                                                                )
-            # ==== PASSIVE BEHAVIOUR ======
-            if self.routing[k].route_counter == 0 and self.routing[k].STAT[0] == RouteStatus.GLOBAL:
-                if foundPath>0:
-                    # print("Calculating Global Route . . .")
-                    self.routing[k].setGlobalRoute(path)
+            # --- Set commands BEFORE guidance (FIX: was after, causing 1-step delay) ---
+            if k == 0:
+                # Agent drone: apply RL action
+                if action == 0:
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", self._accel_value)
+                elif action == 1:
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", self._decel_value)
+                elif action == 2:
+                    self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
+                    self.routing[0]._setCommand(SpeedCommandFlag, "constant")
                 else:
-                    fromPos = self.routing[k].HOME_POS
-                    toPos = self.routing[k].DESTINATION
-                    n_wp = 100
-                    gpath = self.routing[k]._generateWaypoints(fromPos, toPos, n_wp)
-                    self.routing[k].setGlobalRoute(np.array(gpath).reshape((3,n_wp)))
-                        # raise ValueError("[Error] Global route was not found. Mission aborted.")    
-
-            
-
-            self.routing[k].computeGuidanceFromState(
-                                                state = state,
-                                                drone_ids=k, 
-                                                route_timestep=self.routing[k].route_counter,
-                                                speed_limit = self.SPEED_LIMIT)
-            
-            # ======= 3 Actions ==================================================
-            # self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
-            # if action ==0:
-            #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 0.0)
-            # elif action ==1:
-            #     self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", -4)
-            # elif action ==2:
-            #     self.routing[0]._setCommand(SpeedCommandFlag, "hover")
-
-            # ======= 12 Actions =================================================
-            if action ==0:
-                # print(f"Agent {k}: action 0 >>>>> Accelerating . . .")
-                self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
-                self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", 2)  # 0.05
-            elif action ==1:
-                # print(f"Agent {k}: action 1 <<<<< Decelerating . . .")
-                self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
-                self.routing[0]._setCommand(SpeedCommandFlag, "accelerate", -4)
-            elif action ==2:
-                # print(f"Agent {k}: action 2 ===== Hovering . . .")
-                # self.routing[k]._setCommand(SpeedCommandFlag, "hover")
-                self.routing[0]._setCommand(SpeedCommandFlag, "constant")
-                self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)
-            elif action ==3:
-                # print("This is action 3 >>>> following global route . . .")
-                self.routing[0]._setCommand(SpeedCommandFlag, "constant")
-                self.routing[0]._setCommand(RouteCommandFlag, "follow_global", 1)              
+                    raise ValueError(f"Invalid action: {action}")
             else:
-                print("[ERROR] in ExtendedSingleAgentAviary._preprocessAction()")
-                raise ValueError(f"Invalid action: {action}")
-            
-            #### Compute control for the current way point #############
-            
-            # ------------ velocity control ------------
-            rpm_k, _, _ = self.ctrl[k].computeControl(control_timestep=self.CTRL_TIMESTEP, 
-                                                cur_pos=state[0:3],
-                                                cur_quat=state[3:7],
-                                                cur_vel=state[10:13],
-                                                cur_ang_vel=state[13:16],
-                                                target_vel=self.routing[k].TARGET_VEL
-                                                )
-            rpm[k,:] = rpm_k
-            # ================================    
+                # Non-agent drones: constant traffic on global route
+                self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
+                self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)
+
+            # --- Compute IFDS route ---
+            need_ifds = (k == 0) or (self.routing[k].GLOBAL_PATH.size == 0)
+            if need_ifds:
+                foundPath, path = self.routing[k].computeRouteFromState(
+                    route_timestep=self.routing[k].route_counter,
+                    state=state,
+                    home_pos=self.routing[k].HOME_POS,
+                    target_pos=self.MISSION.DESTINS[k, :],
+                    speed_limit=self.SPEED_LIMIT,
+                    obstacle_data=self.OBSTACLE_DATA,
+                    drone_ids=self.DRONE_IDS,
+                )
+
+                if self.routing[k].route_counter == 0 and self.routing[k].STAT[0] == RouteStatus.GLOBAL:
+                    if foundPath > 0:
+                        self.routing[k].setGlobalRoute(path)
+                    else:
+                        fromPos = self.routing[k].HOME_POS
+                        toPos = self.routing[k].DESTINATION
+                        n_wp = 100
+                        gpath = self.routing[k]._generateWaypoints(fromPos, toPos, n_wp)
+                        self.routing[k].setGlobalRoute(np.array(gpath).reshape((3, n_wp)))
+            else:
+                # Reuse existing global route for non-agent drones
+                self.routing[k].setCurrentRoute(self.routing[k].GLOBAL_PATH)
+                self.routing[k].route_counter += 1
+
+            # --- Compute guidance (now processes the CURRENT action's commands) ---
+            self.routing[k].computeGuidanceFromState(
+                state=state,
+                drone_ids=k,
+                route_timestep=self.routing[k].route_counter,
+                speed_limit=self.SPEED_LIMIT,
+            )
+
+            # --- PID velocity control ---
+            rpm_k, _, _ = self.ctrl[k].computeControl(
+                control_timestep=self.CTRL_TIMESTEP,
+                cur_pos=state[0:3],
+                cur_quat=state[3:7],
+                cur_vel=state[10:13],
+                cur_ang_vel=state[13:16],
+                target_vel=self.routing[k].TARGET_VEL,
+            )
+            rpm[k, :] = rpm_k
+
         return rpm
 
     ################################################################################
@@ -342,39 +318,34 @@ class ExtendedSARLAviary(RoutingAviary):
 
         """
         size_obs = self.observation_space.shape[0]
-        n_sensing = size_obs - 13  # n_sensing states = total obs states - 13 fixed internal states
-        obs_array = np.zeros((1,size_obs))
-        
-        sensing_info = np.zeros((1, n_sensing))
-        # First 13 internal states (fixed)
+
+        # Get raw state and normalize kinematic features
         obs = self._getDroneStateVector(0)
+        norm_state = self._clipAndNormalizeState(obs)  # FIX: was using raw unnormalized state
         self.routing[0]._batchRayCast(self.routing[0].DRONE_ID)
         d2destin = self.routing[0].getDistanceToDestin()
         d2destin_normalized = self._clipAndNormalizeD2Destin(d2destin, drone_id=0)
 
         if self.OBS_CHOICE == "ray":
-            # n_obs = self.routing[0].NUM_RAYS * 3
             sensing_matrix = self.routing[0].RAYS_INFO
-            sensing_matrix_normalized = np.apply_along_axis(self._clipAndNormalizeRay, 1, sensing_matrix)
+            sensing_normalized = np.apply_along_axis(self._clipAndNormalizeRay, 1, sensing_matrix).reshape(-1)
         elif self.OBS_CHOICE == "sensor":
-            # n_obs = self.routing[0].NUM_SENSORS * 3
-            sensing_matrix = self.routing[0].SENSOR_INFO
-            sensing_matrix_normalized = sensing_matrix
+            sensing_normalized = self.routing[0].SENSOR_INFO.reshape(-1)
         elif self.OBS_CHOICE == "sector":
-            # n_obs = self.routing[0].NUM_SECTORS * 3
-            sensing_matrix = self.routing[0].SECTOR_INFO
-            sensing_matrix_normalized = sensing_matrix
+            sensing_normalized = self.routing[0].SECTOR_INFO.reshape(-1)
         else:
             raise ValueError(f"[Error] in ExtendedSARLAviary - Invalid OBS_CHOICE")
 
-        # Additional states from Sensing
-        sensing_info[0,:] = np.array([list(sensing_matrix_normalized.reshape(-1))])
+        # Build 1D observation vector using NORMALIZED kinematic states
+        obs_flat = np.hstack([
+            norm_state[0:3], norm_state[7:10], norm_state[10:13], norm_state[13:16],
+            d2destin_normalized,
+            sensing_normalized,
+        ]).astype(np.float32)
 
-        obs_array[0,:] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], # omit 3:7 since they are 
-                                    d2destin_normalized,
-                                    sensing_info[0]
-                                    ]).reshape(size_obs,)
-        return obs_array.astype('float32')
+        # FIX: return shape (N,) not (1, N) for standard Gym compatibility
+        assert obs_flat.shape == (size_obs,), f"Obs shape mismatch: {obs_flat.shape} vs ({size_obs},)"
+        return obs_flat
  
     def reset(self,
               seed : int = None,

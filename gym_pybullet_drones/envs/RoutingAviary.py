@@ -26,7 +26,8 @@ class RoutingAviary(BaseAviary):
                   obstacles=True,
                   user_debug_gui=True,
                   vision_attributes=False,
-                  output_folder='results'
+                  output_folder='results',
+                  skip_drone_raycasting: bool=False
                   ):
         """Initialization of a generic aviary environment.
 
@@ -81,6 +82,7 @@ class RoutingAviary(BaseAviary):
         self.CONTACT_POINTS = [() for _ in range(self.NUM_DRONES)]
         self.CONTACT_FLAGS = np.zeros(self.NUM_DRONES, dtype=int)
         
+        self.SKIP_DRONE_RAYCASTING = skip_drone_raycasting
         self.OBSTACLE_DATA = {}
         self._getObstaclesData()
         
@@ -231,9 +233,13 @@ class RoutingAviary(BaseAviary):
     ################################################################################   
     def _getObstaclesData(self):
         obstacleList = list(RoutingAviary.OBSTACLE_IDS)
-        droneList = list(self.DRONE_IDS)
         # Store obstacles data
         self._storeObjectData(obstacleList, scale=1)
+        # Always include agent drone (index 0) in raycasting
+        # Skip non-agent drones only when skip_drone_raycasting is enabled
+        droneList = [self.DRONE_IDS[0]]  # Always include agent drone
+        if not self.SKIP_DRONE_RAYCASTING:
+            droneList.extend(self.DRONE_IDS[1:])  # Include all drones when not optimizing
         self._storeObjectData(droneList, scale=1/10)
         
     def _storeObjectData(self, objectList, scale=1):

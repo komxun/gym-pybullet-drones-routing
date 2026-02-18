@@ -18,7 +18,12 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                  gui=False,
                  record=False,
                  obs: ObservationType=ObservationType.KIN,
-                 act: ActionType=ActionType.AUTOROUTING
+                 act: ActionType=ActionType.AUTOROUTING,
+                 sensor_cfg: dict=None,
+                 action_cfg: dict=None,
+                 skip_drone_raycasting: bool=False,
+                 obs_choice: str="sensor",
+                 episode_len_sec: int=30
                  ):
         """Initialization of a single agent RL environment.
 
@@ -46,10 +51,14 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
             The type of observation space (kinematic information or vision)
         act : ActionType, optional
             The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
+        sensor_cfg : dict, optional
+            Sensor parameters passed through to routing classes.
+        action_cfg : dict, optional
+            Action parameters (accel_value, decel_value) for the agent drone.
 
         """
         # self.TARGET_POS = np.array([0.2, 8, 1])
-        self.EPISODE_LEN_SEC = 30
+        self.EPISODE_LEN_SEC = episode_len_sec
         self.CUM_REWARD = 0
         super().__init__(drone_model=drone_model,
                          num_drones=num_drones,
@@ -59,7 +68,11 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                          gui=gui,
                          record=record,
                          obs=obs,
-                         act=act
+                         act=act,
+                         sensor_cfg=sensor_cfg,
+                         action_cfg=action_cfg,
+                         skip_drone_raycasting=skip_drone_raycasting,
+                         obs_choice=obs_choice
                          )
         self.CURRENT_POS = self.HOME_POS
 
@@ -94,82 +107,27 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
         detected_ratios = self.routing[0].RAYS_INFO[:,0]
         safe_detected_ratio = self.routing[0].ROV/self.routing[0].RAY_LEN_M
         non_zero_detected_ratios = detected_ratios[np.nonzero(detected_ratios)]
-        if reward_choice == 1:
-            # rmin_values = self.routing[0].SECTOR_INFO[0::3]
-            step_reward = ((h2destin - d2destin)/h2destin)**2
-            reward_collision = -2
-            destin_reward = 2
-           
-        
-            if d2destin < reachThreshold_m:
-                ret = destin_reward
-                # print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
-            # --- Collision ---
-            elif int(self.CONTACT_FLAGS[0]) == 1:
-                ret = reward_collision
-                # print(f"\n***Collided*** reward = {ret}\n")
-            elif any(non_zero_detected_ratios < safe_detected_ratio):
-                too_close_reward = -1*(1-min(self.routing[0].RAYS_INFO[:,0]) / safe_detected_ratio)
-                ret = too_close_reward
-                # print(f"\nx-x-x Intruder entered the Operational Volume x-x-x reward = {ret}\n")
-            else:
-                ret = step_reward
+        ret = 0.0
+        # --- Distance progress (potential-based shaping)
+        progress_reward = prevd2destin - d2destin
+        ret += progress_reward
 
-        elif reward_choice == 2:
-            """Positive reward design: reach destination asap"""
-            step_reward = (prevd2destin - d2destin) * (1/d2destin)
-            # collide_reward = -10 + step_reward
-            # destin_reward = 100*(1/d2destin)
-            collide_reward = -2
-            destin_reward = 2
-            ret = step_reward
+        # --- Time penalty (encourages efficiency)
+        ret += -0.01
 
-            if d2destin < reachThreshold_m:
-                ret = destin_reward
-                # print(f"\n====== Reached Destination!!! ====== reward = {ret}\n")
-            # --- Collision ---
-            elif int(self.CONTACT_FLAGS[0]) == 1:
-                ret = collide_reward
-                # print(f"\n***Collided*** reward = {ret}\n")
-            elif any(non_zero_detected_ratios < safe_detected_ratio):
-                too_close_reward = -1*(1-min(self.routing[0].RAYS_INFO[:,0]) / safe_detected_ratio)
-                ret = too_close_reward
-                # print(f"\nx-x-x Intruder entered the Operational Volume x-x-x reward = {ret}\n")
-            else:
-                ret = step_reward
+        # --- Safe-distance penalty (soft constraint)
+        if len(non_zero_detected_ratios) > 0 and any(non_zero_detected_ratios < safe_detected_ratio):
+            # FIX: penalty is now ADDITIVE to progress, not replacing it
+            safety_penalty = -1*((safe_detected_ratio - min(non_zero_detected_ratios)) / safe_detected_ratio)**2
+            ret += safety_penalty
 
-        elif reward_choice == 3:
-            ret = 0.0
-            # --- Distance progress (potential-based shaping)
-            progress_reward = prevd2destin - d2destin
-            ret += progress_reward
+        # --- Terminal conditions (override)
+        if d2destin < reachThreshold_m:
+            ret = 10.0
+        elif int(self.CONTACT_FLAGS[0]) == 1:
+            ret = -10.0
 
-            # --- Time penalty
-            # ret += -0.01
-
-            # --- Safe-distance penalty (soft constraint)
-            min_dist = np.min(self.routing[0].RAYS_INFO[:, 0])
-
-            if any(non_zero_detected_ratios < safe_detected_ratio):
-                # safety_penalty = -20*((safe_detected_ratio - min(non_zero_detected_ratios)) / safe_detected_ratio)**2
-                safety_penalty = -1*((safe_detected_ratio - min(non_zero_detected_ratios)) / safe_detected_ratio)**2
-                ret = safety_penalty
-                # print(f"\nx-x-x Intruder entered the Operational Volume x-x-x reward = {ret}\n")
-
-            # --- Terminal conditions
-            if d2destin < reachThreshold_m:
-                ret = 10.0
-                # done = True
-                # print("\n====== Reached Destination ======\n")
-
-            elif int(self.CONTACT_FLAGS[0]) == 1:
-                ret = -10.0
-                # done = True
-                # print("\n*** Collided ***\n")
-
-            # print(f"Reward = {ret}")
-
-            self.CUM_REWARD += ret
+        self.CUM_REWARD += ret
         return ret
 
     ################################################################################
@@ -187,17 +145,14 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
         # cond2 : reached destination area
         # cond2 = np.linalg.norm(self.routing.DESTINATION.reshape(3,1) - state[0:3].reshape(3,1)) <= 0.5
         
-        reachThreshold_m = 1  #0.0001
+        reachThreshold_m = 1
 
         if np.linalg.norm(self.routing[0].DESTINATION-state[0:3]) <= reachThreshold_m:
             return True
         elif int(self.CONTACT_FLAGS[0]) == 1:
             return True
-        elif self.step_counter/self.PYB_FREQ > self.EPISODE_LEN_SEC:
-            # print("\n-------- Truncated due to time out ----------\n")
-            return True
+        # FIX: timeout moved to _computeTruncated (timeout != failure for DRL)
         else:
-            self.COMPUTE_DONE = False
             return False
         
     ################################################################################
@@ -211,41 +166,48 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
             Whether the current episode timed out.
 
         """
-        mapBorderXYZ = [10,15,5]
-        # TODO replace "0" with ith drones
-        state = self._getDroneStateVector(0)
+        # FIX: timeout is now truncation, not termination
+        # This matters because DRL should NOT zero out value estimates on timeout
+        if self.step_counter/self.PYB_FREQ > self.EPISODE_LEN_SEC:
+            return True
 
-        # Truncate when the drone collides
-        # if int(self.CONTACT_FLAGS[0]) == 1:
-        #     # print(f"Ayooo it collides!!!")
-        #     return True
-        
-        # if (abs(state[0]) > mapBorderXYZ[0] or abs(state[1]) > mapBorderXYZ[1] or state[2] > mapBorderXYZ[2] # Truncate when the drone is too far away
-        #      or abs(state[7]) > .4 or abs(state[8]) > .4 # Truncate when the drone is too tilted
-        # ):
-        #     return True
+        # Out of bounds safety net
+        state = self._getDroneStateVector(0)
+        if abs(state[0]) > 200 or abs(state[1]) > 200 or state[2] > 50:
+            return True
 
         return False
-        # if self.step_counter/self.PYB_FREQ > self.EPISODE_LEN_SEC:
-        #     print("\n-------- Truncated due to time out ----------\n")
-        #     return True
-        # else:
-        #     return False
 
     ################################################################################
     
     def _computeInfo(self):
-        """Computes the current info dict(s).
-
-        Unused.
+        """Computes the current info dict with rich metrics.
 
         Returns
         -------
-        dict[str, int]
-            Dummy value.
-
+        dict
+            Keys: collision (bool), intrusion (bool), reached (bool),
+            d2dest (float), min_obstacle_ratio (float).
         """
-        return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years
+        state = self._getDroneStateVector(0)
+        d2dest = float(np.linalg.norm(self.routing[0].DESTINATION - state[0:3]))
+        collision = int(self.CONTACT_FLAGS[0]) == 1
+        reached = d2dest < 1.0
+
+        # Intrusion: any ray hit within ROV (range of vision) without collision
+        detected_ratios = self.routing[0].RAYS_INFO[:, 0]
+        safe_ratio = self.routing[0].ROV / self.routing[0].RAY_LEN_M
+        nonzero = detected_ratios[np.nonzero(detected_ratios)]
+        min_ratio = float(np.min(nonzero)) if len(nonzero) > 0 else 1.0
+        intrusion = bool(min_ratio < safe_ratio) and not collision
+
+        return {
+            "collision": collision,
+            "intrusion": intrusion,
+            "reached": reached,
+            "d2dest": d2dest,
+            "min_obstacle_ratio": min_ratio,
+        }
     
     ################################################################################
 
@@ -282,7 +244,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
         normalized_rp = clipped_rp / MAX_PITCH_ROLL
         normalized_y = state[9] / np.pi # No reason to clip
         normalized_vel_xy = clipped_vel_xy / MAX_LIN_VEL_XY
-        normalized_vel_z = clipped_vel_z / MAX_LIN_VEL_XY
+        normalized_vel_z = clipped_vel_z / MAX_LIN_VEL_Z  # FIX: was MAX_LIN_VEL_XY
         normalized_ang_vel = state[13:16]/np.linalg.norm(state[13:16]) if np.linalg.norm(state[13:16]) != 0 else state[13:16]
 
         norm_and_clipped = np.hstack([normalized_pos_xy,

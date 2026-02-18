@@ -12,7 +12,8 @@ class IFDSRoute(BaseRouting):
     def __init__(self,
                  drone_model: DroneModel,
                  drone_id,
-                 g: float=9.8
+                 g: float=9.8,
+                 sensor_cfg: dict=None
                  ):
         """Common routing classes __init__ method.
 
@@ -22,9 +23,11 @@ class IFDSRoute(BaseRouting):
             The type of drone to control (detailed in an .urdf file in folder `assets`).
         g : float, optional
             The gravitational acceleration in m/s^2.
+        sensor_cfg : dict, optional
+            Sensor parameters passed through to BaseRouting.
 
         """
-        super().__init__(drone_model=drone_model, drone_id=drone_id, g=g)
+        super().__init__(drone_model=drone_model, drone_id=drone_id, g=g, sensor_cfg=sensor_cfg)
 
         # ----- IFDS-specific parameters ------
         self.PATH_OPTION = 1
@@ -153,8 +156,10 @@ class IFDSRoute(BaseRouting):
         self._processCommand()
         self._updateTargetPosAndVel(self.CURRENT_PATH, route_timestep, speed_limit)
         self._resetAllCommands()
-        self._batchRayCast(drone_ids)
-        self._plotRoute(self.CURRENT_PATH)
+        # Only agent drone (index 0) needs raycasting and route plotting
+        if self.DRONE_ID == 0:
+            self._batchRayCast(drone_ids)
+            self._plotRoute(self.CURRENT_PATH)
         
      
             
@@ -182,16 +187,10 @@ class IFDSRoute(BaseRouting):
             # if self.DRONE_ID == 0:
             #     print(f"cur_speed is {curSpeed}, new_speed_raw is {new_speed}, accel = {acceleration}, dt = {self.DT}")
             
-            # Clamp at zero to avoid negative forward motion
-            if new_speed >0:
-                new_speed = max(0.0, min(new_speed, speed_limit))
-            elif new_speed <0:
-                new_speed = min(0.0, max(new_speed, -speed_limit))
-                # new_speed = 0
-            
+            # FIX: clamp to [0, speed_limit]. Deceleration past zero should stop, not reverse.
+            new_speed = max(0.0, min(new_speed, speed_limit))
 
-            # If accelerating negatively, apply reverse force to slow down
-            self.TARGET_VEL = abs(new_speed) * path_vect_unit
+            self.TARGET_VEL = new_speed * path_vect_unit
             # if self.DRONE_ID==0:
             #     print(f"before process: new_speed = {new_speed}, |TARGET_VEL| = {np.linalg.norm(self.TARGET_VEL)}")
 
@@ -219,6 +218,19 @@ class IFDSRoute(BaseRouting):
             #     print(f" new_speed = {np.linalg.norm(self.TARGET_VEL)} (speed limit is {speed_limit})")      
         else:
             self._setCommand(SpeedCommandFlag, "hover")
+            # FIX: Position-hold outer loop for hover mode.
+            # PIDVelocityControl has no position feedback, so without this
+            # the drone drifts when TARGET_VEL is just zero.
+            # Compute a small proportional correction velocity toward HOVER_POS.
+            if hasattr(self, 'HOVER_POS') and self.HOVER_POS is not None:
+                pos_error = self.HOVER_POS - self.CUR_POS
+                Kp_hover = 0.5  # proportional gain [1/s]
+                max_hover_speed = 1.0  # m/s cap to avoid aggressive correction
+                correction_vel = Kp_hover * pos_error
+                corr_speed = np.linalg.norm(correction_vel)
+                if corr_speed > max_hover_speed:
+                    correction_vel = correction_vel / corr_speed * max_hover_speed
+                self.TARGET_VEL = correction_vel
             
     def _waypointSkipping(self, path, route_timestep, speed_limit):
         
@@ -306,11 +318,13 @@ class IFDSRoute(BaseRouting):
         obstacles_pos = np.array([])
         obstacles_size = np.array([])
         if bool(obstacle_data):  # Boolean of empty dict return False
-            for j in self.DETECTED_OBS_IDS:
+            # Filter DETECTED_OBS_IDS to only include obstacles that exist in obstacle_data
+            valid_detected_ids = [j for j in self.DETECTED_OBS_IDS if str(j) in obstacle_data]
+            for j in valid_detected_ids:
                 posList.append(obstacle_data[str(j)]["position"])
                 sizeList.append(obstacle_data[str(j)]["size"])
-            obstacles_pos = np.array(posList).reshape(len(self.DETECTED_OBS_IDS), 3)
-            obstacles_size = np.array(sizeList).reshape(len(self.DETECTED_OBS_IDS), 3)
+            obstacles_pos = np.array(posList).reshape(len(valid_detected_ids), 3) if valid_detected_ids else np.array([]).reshape(0, 3)
+            obstacles_size = np.array(sizeList).reshape(len(valid_detected_ids), 3) if valid_detected_ids else np.array([]).reshape(0, 3)
         
         def _CalcUBar(Obj):
             """

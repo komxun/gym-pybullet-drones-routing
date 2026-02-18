@@ -62,7 +62,8 @@ class BaseRouting(object):
     def __init__(self,
                  drone_model: DroneModel,
                  drone_id,
-                 g: float=9.8
+                 g: float=9.8,
+                 sensor_cfg: dict=None
                  ):
         """Common Routing classes __init__ method.
 
@@ -72,11 +73,15 @@ class BaseRouting(object):
             The type of drone to control (detailed in an .urdf file in folder `assets`).
         g : float, optional
             The gravitational acceleration in m/s^2.
+        sensor_cfg : dict, optional
+            Sensor parameters from YAML config. Keys: num_sensors, num_rays_per_sensor,
+            sensor_fov_deg, ray_len_m, rov. If None, uses hardcoded defaults.
 
         """
         #### Set general use constants #############################
         self.DRONE_MODEL = drone_model
         self.DRONE_ID = drone_id
+        self._gui = False  # Set to True by environment when GUI is active
         """DroneModel: The type of drone to control."""
         self.GRAVITY = g*self._getURDFParameter('m')
         """float: The gravitational force (M*g) acting on each drone."""
@@ -99,13 +104,14 @@ class BaseRouting(object):
         self.DETECTED_OBS_DATA = {}
 
         
-        self.NUM_RAYS_PER_SENSOR = 13
-        self.NUM_SENSORS = 10
+        _sc = sensor_cfg or {}
+        self.NUM_RAYS_PER_SENSOR = _sc.get('num_rays_per_sensor', 13)
+        self.NUM_SENSORS = _sc.get('num_sensors', 10)
         self.NUM_SECTORS = 8
-        self.SENSOR_FOV_DEG = 20
-        self.NUM_RAYS = self.NUM_SENSORS* self.NUM_RAYS_PER_SENSOR
-        self.RAY_LEN_M =  30# 14
-        self.ROV = 12.77
+        self.SENSOR_FOV_DEG = _sc.get('sensor_fov_deg', 20)
+        self.NUM_RAYS = self.NUM_SENSORS * self.NUM_RAYS_PER_SENSOR
+        self.RAY_LEN_M = _sc.get('ray_len_m', 30)
+        self.ROV = _sc.get('rov', 12.77)
         self.SFG = 3
 
         # Tracks consecutive static actions (used in reward function)
@@ -207,6 +213,17 @@ class BaseRouting(object):
     ################################################################################
 
     def _plotRoute(self, path):
+        """Plot the current route using PyBullet's debug lines.
+
+        Parameters
+        ----------
+        path : ndarray
+            (3, N) array of 3D waypoints.
+        """
+        # Skip plotting if GUI is not active
+        if not self._gui:
+            return
+            
         if self.DRONE_ID == 0:
             pathColor = [0.1, 0.1, 1]
         else:
@@ -358,20 +375,16 @@ class BaseRouting(object):
             
         elif self.COMMANDS[1]._name == SpeedCommandFlag.HOVER.value:
             # hover
+            # FIX: Always re-latch HOVER_POS when entering hover mode.
+            # Previously, the first-entry guard caused HOVER_POS to be set
+            # from stale CUR_POS (before computeGuidanceFromState updates it).
+            # Now we re-latch every time we transition into hover, so the last
+            # _processCommand call (with fresh CUR_POS) wins.
             if self.STAT[1] != SpeedStatus.HOVERING:
-                
-                self.TARGET_POS = self.CUR_POS
-                self.TARGET_VEL = np.zeros(3)
-                self.HOVER_POS = self.CUR_POS
+                self.HOVER_POS = self.CUR_POS.copy()
                 self.STAT[1] = SpeedStatus.HOVERING
-                # print(f"\n*Activate Hovering Mode!, target pos = {self.TARGET_POS}\n")
-            else:
-                self.TARGET_POS = self.HOVER_POS
-                self.TARGET_VEL = np.zeros(3)
-                self.STAT[1] = SpeedStatus.HOVERING
-                
-                
-                # print(f"curPos: {self.CUR_POS}, targPos: {self.TARGET_POS}")
+            self.TARGET_POS = self.HOVER_POS
+            self.TARGET_VEL = np.zeros(3)
         else:
             print("[Error] in _processSpeedCommand()")
         
@@ -407,7 +420,7 @@ class BaseRouting(object):
         self.COMMANDS[0] = Commander(RouteCommandFlag, "none")
     
     def _resetSpeedCommand(self):
-        self.COMMANDS[1] = Commander(RouteCommandFlag, "none")
+        self.COMMANDS[1] = Commander(SpeedCommandFlag, "none")
 
     ################################################################################
     def setGlobalRoute(self, route):
@@ -485,7 +498,7 @@ class BaseRouting(object):
             
             if (hitObjectUid < 0):
                 hitPosition = [float('inf'), float('inf'), float('inf')]
-                if self.DRONE_ID == 0:
+                if self.DRONE_ID == 0 and self._gui:
                     p.addUserDebugLine(rayFrom[i], rayTo[i], rayMissColor, lifeTime=0.02, lineWidth=2)
             else:
                 # Whether detection of other fellow UAVs is allowed or not
@@ -513,7 +526,7 @@ class BaseRouting(object):
                     if obj_dist < self.ROV:
                         # Plot red rays if drones intrude other's Operational Volume Radius
                         rayHitColor = [1, 0, 0]
-                    if self.DRONE_ID == 0:
+                    if self.DRONE_ID == 0 and self._gui:
                         p.addUserDebugLine(rayFrom[i], hitPosition, rayHitColor, lineWidth=2, lifeTime=0.02)
     
         self.DETECTED_OBS_IDS = detected_obs_ids
@@ -821,15 +834,14 @@ class BaseRouting(object):
         if len(self.DETECTED_OBS_IDS) != 0:
             tempObs = []
             for j in self.DETECTED_OBS_IDS:
-                self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
-                                                      "size": obstacle_data[str(j)]["size"]}
-                tempObs.append(obstacle_data[str(j)]["position"])
+                if str(j) in obstacle_data:
+                    self.DETECTED_OBS_DATA[str(j)] = {"position": obstacle_data[str(j)]["position"],
+                                                          "size": obstacle_data[str(j)]["size"]}
+                    tempObs.append(obstacle_data[str(j)]["position"])
         else:
             self.DETECTED_OBS_DATA = {}
-    
-    import numpy as np
 
-    def _generateWaypoints(self,home_pos, destination, num_waypoints):
+    def _generateWaypoints(self, home_pos, destination, num_waypoints):
         """
         Generate waypoints in 3D for a straight line from home_pos to destination.
 

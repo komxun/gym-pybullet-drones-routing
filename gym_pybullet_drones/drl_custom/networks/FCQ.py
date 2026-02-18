@@ -63,10 +63,11 @@ class FCQ(nn.Module):
         return variable
     
     def load(self, experiences):
-        states, actions, new_states, rewards, is_terminals = experiences
+        # FIX: was (states, actions, new_states, rewards, is_terminals) — rewards and new_states were SWAPPED
+        states, actions, rewards, new_states, is_terminals = experiences
         states = torch.from_numpy(states).float().to(self.device)
         actions = torch.from_numpy(actions).long().to(self.device)
-        new_states = torch.from_numpy(new_states).float().to(self.device)
         rewards = torch.from_numpy(rewards).float().to(self.device)
+        new_states = torch.from_numpy(new_states).float().to(self.device)
         is_terminals = torch.from_numpy(is_terminals).float().to(self.device)
-        return states, actions, new_states, rewards, is_terminals
+        return states, actions, rewards, new_states, is_terminals
