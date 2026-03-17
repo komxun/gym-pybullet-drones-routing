@@ -1,0 +1,2 @@
+model,obs_choice,num_sensors,n_episodes,mean_reward,std_reward,mean_steps,std_steps,success_rate,collision_rate,timeout_rate,intrusion_rate,mean_intrusion_steps
+S-15,sensor,15,100,64.48137764032107,33.96659289076778,605.05,213.5523062390102,0.9,0.1,0.0,0.54,83.97

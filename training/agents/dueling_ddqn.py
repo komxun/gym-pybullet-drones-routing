@@ -9,7 +9,6 @@ Key fixes over the original implementation:
 """
 
 import os
-import gc
 import csv
 import time
 import glob
@@ -127,17 +126,18 @@ class DuelingDDQNAgent:
         batch_size = len(is_terminals)
 
         # Double DQN: select action with online, evaluate with target
-        argmax_a_q_sp = self.online_model(next_states).max(1)[1]
-        q_sp = self.target_model(next_states).detach()
-        max_a_q_sp = q_sp[np.arange(batch_size), argmax_a_q_sp].unsqueeze(1)
+        with torch.no_grad():
+            argmax_a_q_sp = self.online_model(next_states).argmax(dim=1)
+            q_sp = self.target_model(next_states)
+            max_a_q_sp = q_sp.gather(1, argmax_a_q_sp.unsqueeze(1))
+            target_q_sa = rewards + (self.cfg.agent.gamma * max_a_q_sp * (1 - is_terminals))
 
-        target_q_sa = rewards + (self.cfg.agent.gamma * max_a_q_sp * (1 - is_terminals))
         q_sa = self.online_model(states).gather(1, actions)
 
         td_error = q_sa - target_q_sa
         loss = td_error.pow(2).mul(0.5).mean()
 
-        self.value_optimizer.zero_grad()
+        self.value_optimizer.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(
             self.online_model.parameters(), self.cfg.agent.max_gradient_norm
@@ -178,13 +178,14 @@ class DuelingDDQNAgent:
         episode_over = terminated or truncated
         return new_state, episode_over
 
+    @torch.no_grad()
     def soft_update_target(self):
         """Polyak averaging: target = (1-tau)*target + tau*online."""
         tau = self.cfg.agent.tau
         for target_p, online_p in zip(
             self.target_model.parameters(), self.online_model.parameters()
         ):
-            target_p.data.copy_((1.0 - tau) * target_p.data + tau * online_p.data)
+            target_p.data.mul_(1.0 - tau).add_(online_p.data, alpha=tau)
 
     # ------------------------------------------------------------------
     # Training loop
@@ -288,7 +289,6 @@ class DuelingDDQNAgent:
                     self.soft_update_target()
 
                 if episode_over:
-                    gc.collect()
                     break
 
             # Determine episode outcome from last info

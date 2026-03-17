@@ -28,6 +28,7 @@ def make_env(cfg, gui=False, seed=None):
     # Extract sensor and action config dicts (if present in YAML)
     sensor_cfg = _namespace_to_dict(cfg.sensor) if hasattr(cfg, 'sensor') else None
     action_cfg = _namespace_to_dict(cfg.actions) if hasattr(cfg, 'actions') else None
+    mission_cfg = _namespace_to_dict(cfg.mission) if hasattr(cfg, 'mission') else None
 
     env = CollisionAvoidanceAviary(
         cfg=cfg,
@@ -45,6 +46,7 @@ def make_env(cfg, gui=False, seed=None):
         skip_drone_raycasting=getattr(cfg.env, 'skip_drone_raycasting', False),
         obs_choice=getattr(cfg.env, 'obs_choice', 'sensor'),
         episode_len_sec=getattr(cfg.env, 'episode_len_sec', 30),
+        mission_cfg=mission_cfg,
     )
 
     if seed is not None:

@@ -10,10 +10,10 @@ env:
   physics: "pyb"
   ctrl_freq_hz: 30
   sim_freq_hz: 30
-  episode_len_sec: 20
+  episode_len_sec: 40
   obs_choice: "sector"          # "ray", "sensor", or "sector"
   speed_limit_factor: 1.0       # multiplied by MAX_SPEED_KMH to get speed limit
-  skip_drone_raycasting: true   # skip drone-to-drone raycasting (faster for single-agent)
+  skip_drone_raycasting: false   # skip drone-to-drone raycasting (faster for single-agent)
 
 # --- Sensor ---
 sensor:
@@ -26,15 +26,15 @@ sensor:
 # --- Actions ---
 actions:
   accel_value: 2                # acceleration command value (m/s^2)
-  decel_value: -2               # deceleration command value (m/s^2)
+  decel_value: -2.5               # deceleration command value (m/s^2)
 
 # --- Reward ---
 reward:
   reach_threshold_m: 1.0
   reach_reward: 10.0
-  collision_penalty: -10.0
+  collision_penalty: -20.0
   time_penalty: -0.01           # per-step penalty to encourage speed
-  safety_penalty_scale: 1.0     # multiplier for proximity penalty
+  safety_penalty_scale: 4.0     # multiplier for proximity penalty
   progress_weight: 1.0          # weight for distance-progress reward
   # When True, safety penalty is ADDED to progress; when False it REPLACES it
   additive_safety: true
@@ -59,7 +59,7 @@ optimizer:
 
 # --- Replay Buffer ---
 buffer:
-  max_size: 200000
+  max_size: 400000
   batch_size: 64
 
 # --- Exploration ---
@@ -67,17 +67,17 @@ exploration:
   strategy: "e_greedy_exp"      # "e_greedy_exp", "e_greedy_linear", "softmax"
   init_epsilon: 1.0
   min_epsilon: 0.05
-  decay_steps: 100000
+  decay_steps: 200000
 
 # --- Training ---
 training:
-  max_episodes: 500
-  max_minutes: 720
+  max_episodes: 1000
+  max_minutes: 99999
   goal_mean_100_reward: 200.0
   seeds: [42]
-  eval_every_episodes: 10
+  eval_every_episodes: 20
   eval_episodes: 5
-  save_every_episodes: 50
+  save_every_episodes: 100
   log_every_seconds: 30
 
 # --- Paths ---
@@ -85,3 +85,13 @@ paths:
   results_dir: "training_results"
   model_dir: "trained_models"
   log_dir: "tb_logs"
+
+# Mission area tuned for detection=30m, safe_volume=12m
+# Compact arena (~60m diameter) so episodes are short but encounters are frequent
+mission:
+  base_r: 60                    # starting ring radius (m) — paths cross near origin
+  base_r_d: 60                  # destination ring radius (m)
+  min_distance: 25              # > 2x12m safe volume; within 30m detection range
+  min_travel_distance: 35       # achievable with 30m rings + 90° offset (~42m nominal)
+  radius_variation: 5           # ±5m for starting diversity (default 0.5 was negligible)
+  angle_variation_deg: 60       # ±60° (default 90° caused too many constraint retries)

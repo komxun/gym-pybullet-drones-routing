@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import math
 import random
@@ -13,20 +14,36 @@ class RouteMission:
         self.WAYPOINTS = []
 
     def generateRandomMission(self, maxNumDrone, minNumDrone=1, seed=None,
-                               min_distance=20.0, max_attempts=100, min_travel_distance=40):
-        """Generate a random mission with drones spaced apart and traveling a minimum distance."""
+                               min_distance=20.0, max_attempts=100,
+                               min_travel_distance=40, mission_cfg=None):
+        """Generate a random mission with drones spaced apart and traveling a minimum distance.
+
+        Parameters
+        ----------
+        mission_cfg : dict, optional
+            Override default area / spacing constants.  Recognised keys:
+            origin, base_r, base_r_d, h_step, radius_variation,
+            angle_variation_deg, z_variation, min_distance,
+            min_travel_distance.
+        """
+        _mc = mission_cfg or {}
+        min_distance = _mc.get("min_distance", min_distance)
+        min_travel_distance = _mc.get("min_travel_distance", min_travel_distance)
+
         self._validate_random_mission_inputs(minNumDrone, maxNumDrone, seed, min_travel_distance)
 
-        ORIGIN = [0, 0, 5]
-        BASE_R  = 60  #30
-        BASE_R_D = 50  #25
-        H_STEP = 0
-        RADIUS_VARIATION = 0.5
-        ANGLE_VARIATION = np.pi / 2  # 45 deg
-        Z_VARIATION = 0
+        ORIGIN = _mc.get("origin", [0, 0, 5])
+        BASE_R  = _mc.get("base_r", 60)
+        BASE_R_D = _mc.get("base_r_d", 50)
+        H_STEP = _mc.get("h_step", 0)
+        RADIUS_VARIATION = _mc.get("radius_variation", 0.5)
+        ANGLE_VARIATION = _mc.get("angle_variation_deg", 90) * np.pi / 180
+        Z_VARIATION = _mc.get("z_variation", 0)
 
-        while True:
-            self._set_random_seed(seed)
+        retry_seed = seed
+        max_retries = 200
+        for _attempt in range(max_retries):
+            self._set_random_seed(retry_seed)
             self.NUM_DRONES = random.randint(minNumDrone, maxNumDrone)
 
             inits, dests, waypoints = self._generate_drone_positions(
@@ -37,6 +54,17 @@ class RouteMission:
 
             if self._verify_distances(inits, dests, min_distance, self.NUM_DRONES, min_travel_distance):
                 break
+            if retry_seed is not None:
+                retry_seed += 1
+        else:
+            warnings.warn(
+                f"generateRandomMission: could not satisfy constraints after "
+                f"{max_retries} retries (min_dist={min_distance}, "
+                f"min_travel={min_travel_distance}, n_drones={self.NUM_DRONES}, "
+                f"base_r={BASE_R}, base_r_d={BASE_R_D}). "
+                f"Using best-effort positions — constraints may be violated.",
+                RuntimeWarning,
+            )
 
         self._set_mission_parameters(inits, dests, waypoints)
 
@@ -81,7 +109,7 @@ class RouteMission:
             )
             if self._calculate_distance(dest, init_pos) >= min_travel_dist:
                 return dest
-        # print(f"⚠️ Fallback destination for drone {i}")
+        # print(f" Fallback destination for drone {i}")
         # input("Press Enter to continue. . .")
         return dest
 
@@ -97,29 +125,31 @@ class RouteMission:
             if self._is_position_valid(pos, existing, min_dist):
                 return pos
 
-        # print(f"⚠️ Fallback initial position for drone {i}")
+        # print(f" Fallback initial position for drone {i}")
         fallback_r = max(radius, min_dist * total / (2 * np.pi) * 1.2)
         fallback_angle = (i / total) * 2 * np.pi + angle_offset
         return [base[0] + fallback_r * np.cos(fallback_angle),
                 base[1] + fallback_r * np.sin(fallback_angle),
                 base[2] + i * h_step]
 
-    def _verify_distances(self, inits, dests, min_dist, num, min_travel):
+    def _verify_distances(self, inits, dests, min_dist, num, min_travel_dist):
         def dist(a, b): return np.linalg.norm(np.array(a) - np.array(b))
 
         min_init_dist = float('inf')
         min_dest_dist = float('inf')
-        min_travel = float('inf')
+        min_travel_actual = float('inf')
 
         for i in range(num):
-            min_travel = min(min_travel, dist(inits[i], dests[i]))
+            min_travel_actual = min(min_travel_actual, dist(inits[i], dests[i]))
             for j in range(i + 1, num):
                 min_init_dist = min(min_init_dist, dist(inits[i], inits[j]))
                 min_dest_dist = min(min_dest_dist, dist(dests[i], dests[j]))
 
-        # print(f"Initial min dist: {min_init_dist:.2f}, Destination min dist: {min_dest_dist:.2f}, Travel min: {min_travel:.2f}")
+        # print(f"Initial min dist: {min_init_dist:.2f}, Destination min dist: {min_dest_dist:.2f}, Travel min: {min_travel_actual:.2f}")
 
-        return min_init_dist >= min_dist and min_dest_dist >= min_dist and min_travel >= min_travel
+        if num == 1:
+            return min_travel_actual >= min_travel_dist
+        return min_init_dist >= min_dist and min_dest_dist >= min_dist and min_travel_actual >= min_travel_dist
 
     def _set_mission_parameters(self, init, dest, waypoints):
         rpys = np.zeros((self.NUM_DRONES, 3))
@@ -140,8 +170,9 @@ class RouteMission:
 
     def _set_random_seed(self, seed):
         if seed is not None:
-            # print(f"🔢 Seed: {seed}")
+            # print(f"Seed: {seed}")
             random.seed(seed)
+            np.random.seed(seed)
 
     def _validate_random_mission_inputs(self, min_drones, max_drones, seed, min_travel):
         if not (isinstance(min_drones, int) and isinstance(max_drones, int)):

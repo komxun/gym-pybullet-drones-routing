@@ -159,7 +159,7 @@ class IFDSRoute(BaseRouting):
         # Only agent drone (index 0) needs raycasting and route plotting
         if self.DRONE_ID == 0:
             self._batchRayCast(drone_ids)
-            self._plotRoute(self.CURRENT_PATH)
+        self._plotRoute(self.CURRENT_PATH)
         
      
             
@@ -236,7 +236,19 @@ class IFDSRoute(BaseRouting):
         
         # -------------------- Target Position -----------------------------
         # -----------------Waypoint Skipping Logic--------------------------
+        n_wp = path.shape[1]
         path_vect_unit = np.zeros(3)
+
+        # Guard: for very short paths, just aim at the last waypoint
+        if n_wp <= 1:
+            if n_wp == 1:
+                self.TARGET_POS = path[:, 0]
+                diff = path[:, 0] - self.CUR_POS
+                norm = np.linalg.norm(diff)
+                if norm > 0:
+                    path_vect_unit = diff / norm
+            return path_vect_unit
+
         acceleration = 0
         if self.COMMANDS[1]._value:
             acceleration = self.COMMANDS[1]._value
@@ -246,25 +258,28 @@ class IFDSRoute(BaseRouting):
         Wi = path[:,0]
         Wf = path[:,-1]
         if new_speed < 0 :
-            k = path.shape[1]-1
+            k = n_wp - 1
             increment = -1
         else:
-            k = 2   # Initial waypoint number to follow
+            k = min(2, n_wp - 1)   # Initial waypoint number to follow
             increment = 1
         while True:
             if (new_speed < 0 and k <= 0):
                 break
-            elif new_speed > 0 and k >= path.shape[1]-1:
+            elif new_speed > 0 and k >= n_wp - 1:
                 break
 
             k_n = k + increment
-            k_n = max(k_n, 0)
+            k_n = max(0, min(k_n, n_wp - 1))
             
             Wi = path[:,k]
             Wf = path[:,k_n]
 
             path_vect = Wf - Wi
-            path_vect_unit = path_vect / np.linalg.norm(path_vect)
+            norm_pv = np.linalg.norm(path_vect)
+            if norm_pv == 0:
+                break
+            path_vect_unit = path_vect / norm_pv
             a = path_vect[0]
             b = path_vect[1]
             c = path_vect[2]
@@ -280,10 +295,12 @@ class IFDSRoute(BaseRouting):
                 #     print(f": targeting WP # {k_n}")
                 if np.linalg.norm(self.CUR_POS.reshape(3,1) - Wf.reshape(3,1)) <= wp_closeness_threshold: 
                     k += increment
+                    k = max(0, min(k, n_wp - 1))
                 else:
                     break
             else:
                 k += increment
+                k = max(0, min(k, n_wp - 1))
 
         if np.linalg.norm(Wf - self.CUR_POS) != 0:
             path_vect_unit = (Wf - self.CUR_POS) / np.linalg.norm(Wf - self.CUR_POS)

@@ -51,15 +51,15 @@ def draw_circle_around_drone(center, radius=1.0, color=[0, 1, 0], segments=36, z
     return circle_lines
 
 DEFAULT_DRONES = DroneModel("hb")
-DEFAULT_NUM_DRONES = 2
+DEFAULT_NUM_DRONES = 10
 DEFAULT_PHYSICS = Physics("pyb")
 DEFAULT_GUI = True
 DEFAULT_RECORD_VISION = False
 DEFAULT_PLOT = False
 DEFAULT_USER_DEBUG_GUI = False
 DEFAULT_OBSTACLES = True
-DEFAULT_SIMULATION_FREQ_HZ = 30
-DEFAULT_CONTROL_FREQ_HZ = 30
+DEFAULT_SIMULATION_FREQ_HZ = 60
+DEFAULT_CONTROL_FREQ_HZ = 60
 DEFAULT_DURATION_SEC = 20
 DEFAULT_OUTPUT_FOLDER = 'results'
 DEFAULT_COLAB = False
@@ -143,7 +143,7 @@ def run(
             min_dists_all = []   # optional history logging 
             # Drone's 1 following camera
             p.resetDebugVisualizerCamera(cameraDistance=35, cameraYaw=0, cameraPitch=-60, cameraTargetPosition=env.routing[0].CUR_POS)
-
+            # p.resetDebugVisualizerCamera(cameraDistance=100, cameraYaw=0, cameraPitch=-89, cameraTargetPosition=[0,0,0])
             positions = [p.getBasePositionAndOrientation(env.DRONE_IDS[i])[0]
                         for i in range(ARGS.num_drones)]
             
@@ -198,36 +198,36 @@ def run(
                     segments=36,
                     z_offset=0.05
                 )
-                circle_inner_ids = draw_circle_around_drone(
-                    center=positions[i],
-                    radius=FLIGHT_GEO,
-                    color=[0, 1, 0],
-                    segments=36,
-                    z_offset=0.05
-                )
+                # circle_inner_ids = draw_circle_around_drone(
+                #     center=positions[i],
+                #     radius=FLIGHT_GEO,
+                #     color=[0, 1, 0],
+                #     segments=36,
+                #     z_offset=0.05
+                # )
                 debug_items.extend(circle_ids)
-                debug_items.extend(circle_inner_ids)
+                # debug_items.extend(circle_inner_ids)
             # === Compute global minimum separation ===
             global_min_dist = np.min(dist_matrix)
 
             # === Display global stats at fixed location ===
             # For example, top-left of the scene: x=-5, y=-5, z=5
-            debug_items.append(
-                p.addUserDebugText(
-                    f"Global min separation: {global_min_dist:.2f} m",
-                    [-35, 25, 5],
-                    textColorRGB=[1, 1, 1],  # white text
-                    textSize=1.5
-                )
-            )
-            debug_items.append(
-                p.addUserDebugText(
-                    f"Episode: {ep}, Timestep: {count}",
-                    [-35, 20, 5],  # slightly below the first text
-                    textColorRGB=[1, 1, 0],  # yellow
-                    textSize=1.5
-                )
-            )
+            # debug_items.append(
+            #     p.addUserDebugText(
+            #         f"Global min separation: {global_min_dist:.2f} m",
+            #         [-35, 25, 5],
+            #         textColorRGB=[1, 1, 1],  # white text
+            #         textSize=1.5
+            #     )
+            # )
+            # debug_items.append(
+            #     p.addUserDebugText(
+            #         f"Episode: {ep}, Timestep: {count}",
+            #         [-35, 20, 5],  # slightly below the first text
+            #         textColorRGB=[1, 1, 0],  # yellow
+            #         textSize=1.5
+            #     )
+            # )
             
             #### Log the simulation ####################################
             # for j in range(num_drones):

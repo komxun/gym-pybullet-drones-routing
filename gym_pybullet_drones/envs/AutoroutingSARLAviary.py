@@ -23,7 +23,8 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                  action_cfg: dict=None,
                  skip_drone_raycasting: bool=False,
                  obs_choice: str="sensor",
-                 episode_len_sec: int=30
+                 episode_len_sec: int=30,
+                 mission_cfg: dict=None
                  ):
         """Initialization of a single agent RL environment.
 
@@ -72,7 +73,8 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
                          sensor_cfg=sensor_cfg,
                          action_cfg=action_cfg,
                          skip_drone_raycasting=skip_drone_raycasting,
-                         obs_choice=obs_choice
+                         obs_choice=obs_choice,
+                         mission_cfg=mission_cfg
                          )
         self.CURRENT_POS = self.HOME_POS
 
@@ -168,7 +170,7 @@ class AutoroutingSARLAviary(ExtendedSARLAviary):
         """
         # FIX: timeout is now truncation, not termination
         # This matters because DRL should NOT zero out value estimates on timeout
-        if self.step_counter/self.PYB_FREQ > self.EPISODE_LEN_SEC:
+        if self.step_counter/self.PYB_FREQ >= self.EPISODE_LEN_SEC:
             return True
 
         # Out of bounds safety net

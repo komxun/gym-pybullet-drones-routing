@@ -104,91 +104,213 @@ def rolling_mean(data, window=20):
     return np.convolve(arr, kernel, mode="valid")
 
 
-def plot_training_rewards(models, training_data, window=20):
-    """Plot training reward curves for all models."""
+def ema_smooth(data, alpha=0.05):
+    """Exponential moving average — same principle as TensorBoard smoothing.
+
+    alpha controls how much weight the current value gets vs. the running
+    average. Lower alpha = smoother curve (alpha=0.05 ~ TensorBoard 0.95).
+    """
+    arr = np.array(data, dtype=float)
+    out = np.zeros_like(arr)
+    out[0] = arr[0]
+    for i in range(1, len(arr)):
+        out[i] = alpha * arr[i] + (1.0 - alpha) * out[i - 1]
+    return out
+
+
+# Grouped obs sets used for 3-panel layout
+_OBS_GROUPS = [
+    ("D", "Ray (D)",     [5, 10, 15], ["#a6cee3", "#1f78b4", "#08306b"]),
+    ("S", "Sensor (S)",  [5, 10, 15], ["#b2df8a", "#33a02c", "#006d2c"]),
+    ("X", "Sector (X)",  [5, 10, 15], ["#fb9a99", "#e31a1c", "#800026"]),
+]
+_SENSOR_LS = {5: "-", 10: "--", 15: ":"}
+
+
+def _grouped_ema_plot(training_data, series_fn, ylabel, suptitle, filename,
+                      ema_alpha=0.05, ylim=None):
+    """3-panel (D / S / X) plot: faint raw signal + bold EMA smooth curve."""
     if not HAS_MPL:
         return
-    fig, ax = plt.subplots(figsize=(12, 6))
-    for name in models:
-        d = training_data.get(name)
-        if d is None:
-            continue
-        smoothed = rolling_mean(d["reward"], window)
-        episodes = np.arange(window, window + len(smoothed))
-        ax.plot(episodes, smoothed,
-                color=MODEL_COLORS.get(name, "gray"),
-                linestyle=MODEL_LINESTYLES.get(name, "-"),
-                label=name, linewidth=1.5)
-    ax.set_xlabel("Episode")
-    ax.set_ylabel(f"Reward (rolling {window}-ep mean)")
-    ax.set_title("Training Reward Curves")
-    ax.legend(ncol=3, fontsize=9)
-    ax.grid(True, alpha=0.3)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle(suptitle, fontsize=12, fontweight="bold")
+
+    for ax, (prefix, panel_title, sensors, colors) in zip(axes, _OBS_GROUPS):
+        for ns, color in zip(sensors, colors):
+            name = f"{prefix}-{ns}"
+            d = training_data.get(name)
+            if d is None:
+                continue
+            raw = np.array(series_fn(d), dtype=float)
+            eps = np.array(d["episode"])
+            ls = _SENSOR_LS[ns]
+            # Faint raw signal in background
+            ax.plot(eps, raw, color=color, alpha=0.18, linewidth=0.7,
+                    linestyle=ls)
+            # Bold EMA curve in foreground
+            ax.plot(eps, ema_smooth(raw, alpha=ema_alpha), color=color,
+                    linewidth=2.2, linestyle=ls, label=f"{name}")
+
+        ax.set_title(panel_title, fontsize=11)
+        ax.set_xlabel("Episode")
+        ax.set_ylabel(ylabel)
+        ax.legend(fontsize=9, loc="best")
+        ax.grid(True, alpha=0.25)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
     plt.tight_layout()
-    path = os.path.join(OUTPUT_DIR, "training_rewards.png")
-    fig.savefig(path, dpi=150)
+    path = os.path.join(OUTPUT_DIR, filename)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {path}")
 
 
+def plot_training_rewards(models, training_data, window=20):
+    """Plot training reward curves — EMA smoothed, grouped by obs type."""
+    _grouped_ema_plot(
+        training_data,
+        series_fn=lambda d: d["reward"],
+        ylabel="Reward",
+        suptitle="Training Reward Curves  —  faint: raw · bold: EMA smoothed (α=0.05)",
+        filename="training_rewards.png",
+        ema_alpha=0.05,
+    )
+
+
 def plot_training_outcomes(models, training_data, window=50):
-    """Plot running success/collision/timeout rates during training."""
+    """Plot success/collision/timeout rates — EMA smoothed, grouped by obs type."""
     if not HAS_MPL:
         return
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
-    titles = ["Success Rate", "Collision Rate", "Timeout Rate"]
-    outcome_keys = ["reached", "collision", "timeout"]
 
-    for ax, title, key in zip(axes, titles, outcome_keys):
-        for name in models:
-            d = training_data.get(name)
-            if d is None:
-                continue
-            binary = [1.0 if o == key else 0.0 for o in d["outcome"]]
-            if len(binary) < window:
-                continue
-            smoothed = rolling_mean(binary, window)
-            episodes = np.arange(window, window + len(smoothed))
-            ax.plot(episodes, smoothed * 100,
-                    color=MODEL_COLORS.get(name, "gray"),
-                    linestyle=MODEL_LINESTYLES.get(name, "-"),
-                    label=name, linewidth=1.5)
+    # One figure per metric (cleaner, larger panels)
+    for key, ylabel, filename in [
+        ("reached",   "Success Rate (%)",   "training_outcome_success.png"),
+        ("collision", "Collision Rate (%)", "training_outcome_collision.png"),
+        ("timeout",   "Timeout Rate (%)",   "training_outcome_timeout.png"),
+    ]:
+        _grouped_ema_plot(
+            training_data,
+            series_fn=lambda d, k=key: [100.0 if o == k else 0.0
+                                        for o in d["outcome"]],
+            ylabel=ylabel,
+            suptitle=f"Training {ylabel}  —  faint: raw · bold: EMA smoothed (α=0.03)",
+            filename=filename,
+            ema_alpha=0.03,
+            ylim=(-5, 105),
+        )
+
+    # Combined 3-metric figure kept for backward compatibility
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    for ax, (key, ylabel) in zip(axes, [
+        ("reached",   "Success Rate (%)"),
+        ("collision", "Collision Rate (%)"),
+        ("timeout",   "Timeout Rate (%)"),
+    ]):
+        for prefix, _, sensors, colors in _OBS_GROUPS:
+            for ns, color in zip(sensors, colors):
+                name = f"{prefix}-{ns}"
+                d = training_data.get(name)
+                if d is None:
+                    continue
+                raw = np.array([100.0 if o == key else 0.0
+                                for o in d["outcome"]])
+                ls = _SENSOR_LS[ns]
+                ax.plot(d["episode"], raw, color=color, alpha=0.12,
+                        linewidth=0.6, linestyle=ls)
+                ax.plot(d["episode"], ema_smooth(raw, alpha=0.03),
+                        color=color, linewidth=1.8, linestyle=ls,
+                        label=name)
         ax.set_xlabel("Episode")
-        ax.set_ylabel("Rate (%)")
-        ax.set_title(f"Training {title} (rolling {window}-ep)")
-        ax.legend(ncol=3, fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.set_ylabel(ylabel)
+        ax.set_title(ylabel)
         ax.set_ylim(-5, 105)
-
+        ax.legend(ncol=3, fontsize=7)
+        ax.grid(True, alpha=0.25)
     plt.tight_layout()
     path = os.path.join(OUTPUT_DIR, "training_outcome_rates.png")
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  Saved: {path}")
 
 
 def plot_training_intrusions(models, training_data, window=20):
-    """Plot intrusion steps per episode during training."""
+    """Plot intrusion steps per episode — EMA smoothed, grouped by obs type."""
+    _grouped_ema_plot(
+        training_data,
+        series_fn=lambda d: d["intrusion_steps"],
+        ylabel="Intrusion Steps",
+        suptitle="Training Intrusion Steps  —  faint: raw · bold: EMA smoothed (α=0.05)",
+        filename="training_intrusions.png",
+        ema_alpha=0.05,
+    )
+
+
+def plot_training_wallclock(models, training_data, window=20):
+    """Plot training wall-clock time: cumulative total and per-episode duration."""
     if not HAS_MPL:
         return
-    fig, ax = plt.subplots(figsize=(12, 6))
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    # --- Left: cumulative wall-clock time ---
+    ax = axes[0]
     for name in models:
         d = training_data.get(name)
-        if d is None:
+        if d is None or not any(s > 0 for s in d["seconds"]):
             continue
-        smoothed = rolling_mean(d["intrusion_steps"], window)
+        cumulative = np.cumsum(d["seconds"]) / 60.0  # convert to minutes
+        ax.plot(d["episode"], cumulative,
+                color=MODEL_COLORS.get(name, "gray"),
+                linestyle=MODEL_LINESTYLES.get(name, "-"),
+                label=name, linewidth=1.5)
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Cumulative Training Time (min)")
+    ax.set_title("Cumulative Wall-Clock Training Time")
+    ax.legend(ncol=3, fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+    # --- Right: rolling mean of per-episode duration ---
+    ax = axes[1]
+    for name in models:
+        d = training_data.get(name)
+        if d is None or not any(s > 0 for s in d["seconds"]):
+            continue
+        smoothed = rolling_mean(d["seconds"], window)
         episodes = np.arange(window, window + len(smoothed))
         ax.plot(episodes, smoothed,
                 color=MODEL_COLORS.get(name, "gray"),
                 linestyle=MODEL_LINESTYLES.get(name, "-"),
                 label=name, linewidth=1.5)
     ax.set_xlabel("Episode")
-    ax.set_ylabel(f"Intrusion Steps (rolling {window}-ep mean)")
-    ax.set_title("Training Intrusion Steps")
+    ax.set_ylabel(f"Episode Duration (s, rolling {window}-ep mean)")
+    ax.set_title("Per-Episode Training Duration")
     ax.legend(ncol=3, fontsize=9)
     ax.grid(True, alpha=0.3)
+
     plt.tight_layout()
-    path = os.path.join(OUTPUT_DIR, "training_intrusions.png")
+    path = os.path.join(OUTPUT_DIR, "training_wallclock.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"  Saved: {path}")
+
+    # --- Bar chart: total training time per model ---
+    fig, ax = plt.subplots(figsize=(10, 5))
+    names_with_data = [n for n in models if training_data.get(n) and any(s > 0 for s in training_data[n]["seconds"])]
+    totals = [np.sum(training_data[n]["seconds"]) / 60.0 for n in names_with_data]
+    x = np.arange(len(names_with_data))
+    colors = [MODEL_COLORS.get(n, "gray") for n in names_with_data]
+    bars = ax.bar(x, totals, 0.6, color=colors, edgecolor="black", linewidth=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(names_with_data, rotation=45, ha="right", fontsize=9)
+    ax.set_ylabel("Total Training Time (min)")
+    ax.set_title("Total Wall-Clock Training Time per Model")
+    ax.grid(True, alpha=0.3, axis="y")
+    for bar, val in zip(bars, totals):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                f"{val:.1f}m", ha="center", va="bottom", fontsize=8)
+    plt.tight_layout()
+    path = os.path.join(OUTPUT_DIR, "training_wallclock_total.png")
     fig.savefig(path, dpi=150)
     plt.close(fig)
     print(f"  Saved: {path}")
@@ -362,6 +484,7 @@ def main():
         plot_training_rewards(models, training_data, window=args.window)
         plot_training_outcomes(models, training_data, window=min(50, args.window * 2))
         plot_training_intrusions(models, training_data, window=args.window)
+        plot_training_wallclock(models, training_data, window=args.window)
     else:
         print("  [SKIP] No training data found.")
 

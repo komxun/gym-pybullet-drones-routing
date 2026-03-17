@@ -33,7 +33,8 @@ class ExtendedSARLAviary(RoutingAviary):
                  sensor_cfg: dict=None,
                  action_cfg: dict=None,
                  skip_drone_raycasting: bool=False,
-                 obs_choice: str="sensor"
+                 obs_choice: str="sensor",
+                 mission_cfg: dict=None
                  ):
         """Initialization of a generic single and multi-agent RL environment.
 
@@ -76,6 +77,7 @@ class ExtendedSARLAviary(RoutingAviary):
         self._accel_value = _ac.get('accel_value', 2)
         self._decel_value = _ac.get('decel_value', -2)
         self._sensor_cfg = sensor_cfg
+        self._mission_cfg = mission_cfg
         # =============================================================================
         homePos =  np.array([0,0,0.5]) 
         destin  =  np.array([0.2, 10, 1])
@@ -84,7 +86,8 @@ class ExtendedSARLAviary(RoutingAviary):
         num_drones_total = num_drones 
 
         self.MISSION = RouteMission()
-        self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones)
+        self.MISSION.generateRandomMission(maxNumDrone=num_drones, minNumDrone=num_drones,
+                                           mission_cfg=self._mission_cfg)
         self.OBS_CHOICE = obs_choice  # ray, sensor, sector
         
         # =============================================================================
@@ -209,8 +212,8 @@ class ExtendedSARLAviary(RoutingAviary):
                 self.routing[k]._setCommand(RouteCommandFlag, "follow_global", 1)
                 self.routing[k]._setCommand(SpeedCommandFlag, "accelerate", 1)
 
-            # --- Compute IFDS route ---
-            need_ifds = (k == 0) or (self.routing[k].GLOBAL_PATH.size == 0)
+            # --- Compute IFDS route (once at start, then follow global path) ---
+            need_ifds = (self.routing[k].GLOBAL_PATH.size == 0)
             if need_ifds:
                 foundPath, path = self.routing[k].computeRouteFromState(
                     route_timestep=self.routing[k].route_counter,
@@ -222,7 +225,7 @@ class ExtendedSARLAviary(RoutingAviary):
                     drone_ids=self.DRONE_IDS,
                 )
 
-                if self.routing[k].route_counter == 0 and self.routing[k].STAT[0] == RouteStatus.GLOBAL:
+                if self.routing[k].route_counter == 1:
                     if foundPath > 0:
                         self.routing[k].setGlobalRoute(path)
                     else:
@@ -232,7 +235,7 @@ class ExtendedSARLAviary(RoutingAviary):
                         gpath = self.routing[k]._generateWaypoints(fromPos, toPos, n_wp)
                         self.routing[k].setGlobalRoute(np.array(gpath).reshape((3, n_wp)))
             else:
-                # Reuse existing global route for non-agent drones
+                # Reuse existing global path for all drones
                 self.routing[k].setCurrentRoute(self.routing[k].GLOBAL_PATH)
                 self.routing[k].route_counter += 1
 
@@ -267,12 +270,10 @@ class ExtendedSARLAviary(RoutingAviary):
         ndarray
             A Box() of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12) depending on the observation type.
         """
-        # Base observation (12 vars) X Y Z R P Y  VX VY VZ  WX WY  WZ
+        # Base observation (7 vars) X Y Z Yaw VX VY VZ
         lo, hi = -1.0, 1.0
-        # discrete_act_lo = 0
-        # discrete_act_hi = 2
-        obs_lower_bound = np.array([lo, lo, 0, lo, lo, lo, lo, lo, lo, lo, lo, lo], dtype=float)
-        obs_upper_bound = np.array([hi, hi, hi, hi, hi, hi, hi, hi, hi, hi, hi, hi], dtype=float)
+        obs_lower_bound = np.array([lo, lo, 0, lo, lo, lo, lo], dtype=float)
+        obs_upper_bound = np.array([hi, hi, hi, hi, hi, hi, hi], dtype=float)
         # ++++++ Add distance-to-destination to observation space ++++++
         # Add distance-to-destination
         obs_lower_bound = np.append(obs_lower_bound, 0.0)
@@ -293,9 +294,9 @@ class ExtendedSARLAviary(RoutingAviary):
             sensing_hi = np.tile([1, 1, 1, 1], num_sensors)
         elif self.OBS_CHOICE == "sector":
             num_sectors = self.routing[0].NUM_SECTORS
-            # Extracted Features: [r_min, r_mean, dhit] per sector (fixed to 8)
-            sensing_lo = np.tile([0, 0, 0], num_sectors)
-            sensing_hi = np.tile([1, 1, 1], num_sectors)
+            # Extracted Features: [r_min, r_mean, dhit, los_angle] per sector
+            sensing_lo = np.tile([0, 0, 0, -1], num_sectors)
+            sensing_hi = np.tile([1, 1, 1, 1], num_sectors)
         else:
             print("[ERROR] in BaseRLAviary._observationSpace():  Invalid OBS_CHOICE")
         
@@ -337,8 +338,11 @@ class ExtendedSARLAviary(RoutingAviary):
             raise ValueError(f"[Error] in ExtendedSARLAviary - Invalid OBS_CHOICE")
 
         # Build 1D observation vector using NORMALIZED kinematic states
+        # 7 kinematic features: X, Y, Z, Yaw, Vx, Vy, Vz
         obs_flat = np.hstack([
-            norm_state[0:3], norm_state[7:10], norm_state[10:13], norm_state[13:16],
+            norm_state[0:3],      # X, Y, Z
+            norm_state[9:10],     # Yaw
+            norm_state[10:13],    # Vx, Vy, Vz
             d2destin_normalized,
             sensing_normalized,
         ]).astype(np.float32)
@@ -346,7 +350,9 @@ class ExtendedSARLAviary(RoutingAviary):
         # FIX: return shape (N,) not (1, N) for standard Gym compatibility
         assert obs_flat.shape == (size_obs,), f"Obs shape mismatch: {obs_flat.shape} vs ({size_obs},)"
         return obs_flat
- 
+
+    ################################################################################
+
     def reset(self,
               seed : int = None,
               options : dict = None):
@@ -371,7 +377,8 @@ class ExtendedSARLAviary(RoutingAviary):
         """
         self.CUM_REWARD = 0
         
-        self.MISSION.generateRandomMission(maxNumDrone=self.NUM_DRONES, minNumDrone=self.NUM_DRONES)
+        self.MISSION.generateRandomMission(maxNumDrone=self.NUM_DRONES, minNumDrone=self.NUM_DRONES,
+                                           seed=seed, mission_cfg=self._mission_cfg)
         
         p.resetSimulation(physicsClientId=self.CLIENT)
         
@@ -439,6 +446,7 @@ class ExtendedSARLAviary(RoutingAviary):
             Array containing the non-normalized state of a single drone.
         """
         raise NotImplementedError
+
     def _clipAndNormalizeSector(self, sectorinfo):
         """Normalizes a drone's state to the [-1,1] range.
         Must be implemented in a subclass.

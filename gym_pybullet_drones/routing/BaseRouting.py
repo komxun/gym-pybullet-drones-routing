@@ -221,6 +221,7 @@ class BaseRouting(object):
             (3, N) array of 3D waypoints.
         """
         # Skip plotting if GUI is not active
+       
         if not self._gui:
             return
             
@@ -482,7 +483,7 @@ class BaseRouting(object):
         # rayTo = self._RayCast_Sphere(rayFrom)
         # rayTo = self._RayCast_Circle(rayFrom)
         rayTo = self._RayCast_Circle_FoV(rayFrom)
-        results = p.rayTestBatch(rayFrom, rayTo, numThreads = 0)
+        results = p.rayTestBatch(rayFrom, rayTo, numThreads=1)
         # *************************************************
         
         self.RAYS_INFO = self._extractRayInfo(results)
@@ -756,29 +757,39 @@ class BaseRouting(object):
     #########################################################################################################################
     def _extractSectorInfo(self, rayResult, n_sectors=8, plot_edges=True):
         """
-        Extract sector-based features (min_range, mean_range, hit_fraction) from batch ray-casting.
-        Also plots sector edges for debugging if plot_edges=True.
+        Extract sector-based features from batch ray-casting.
+        Per sector: [min_range, mean_range, hit_fraction, los_angle]
+        los_angle is the bearing to the closest hit in the sector,
+        normalized to [-1, 1] relative to drone yaw (see _extractSensorInfo).
         """
+        def _wrap_to_pi(angle: float) -> float:
+            """Wrap angle to [-pi, pi]."""
+            return (angle + np.pi) % (2.0 * np.pi) - np.pi
+
         max_range = self.RAY_LEN_M
-        droneYaw = self.CUR_RPY[2]
-        agent_x, agent_y, agent_z = self.CUR_POS
+        yaw = float(self.CUR_RPY[2])
+        drone_pos = np.asarray(self.CUR_POS, dtype=float)
 
         NUM_RAYS = self.NUM_RAYS
 
         # Initialize arrays
         ranges = np.zeros(NUM_RAYS, dtype=float)
         angles = np.zeros(NUM_RAYS, dtype=float)
-        mask = np.zeros(NUM_RAYS, dtype=int)
+        mask = np.zeros(NUM_RAYS, dtype=bool)
+        hit_positions = np.zeros((NUM_RAYS, 3), dtype=float)
 
         # Compute ranges and angles relative to drone
         for i, result in enumerate(rayResult):
             hit_id = result[0]
             hit_fraction = result[2]
-            hit_pos = np.array(result[3])
+            hit_pos = result[3]
 
-            mask[i] = hit_id >= 0 and hit_fraction > 0
+            valid = (hit_id >= 0) and (hit_fraction > 0)
+            mask[i] = valid
             ranges[i] = hit_fraction * max_range
             angles[i] = self.RAY_ANGLES[i]   # precomputed ray angles
+            if valid:
+                hit_positions[i, :] = np.asarray(hit_pos, dtype=float)
 
         # Sector edges (relative to drone yaw)
         sector_edges = np.linspace(-np.pi, np.pi, n_sectors + 1) - np.pi / n_sectors
@@ -796,23 +807,34 @@ class BaseRouting(object):
             beams_in_sector = in_sector.sum()
 
             if beams_in_sector == 0:
-                features.extend([1.0, 1.0, 0.0])
+                features.extend([1.0, 1.0, 0.0, 0.0])
                 continue
 
-            valid_idx = in_sector & (mask.astype(bool))
+            valid_idx = in_sector & mask
             cnt_hits = valid_idx.sum()
             hit_density_sector = cnt_hits / beams_in_sector
             if cnt_hits > 0:
                 rsec = ranges[valid_idx]
                 rmin = rsec.min() / max_range
                 rmean = rsec.mean() / max_range
+
+                # LOS angle from the closest hit in this sector
+                hit_global_indices = np.where(valid_idx)[0]
+                hit_ranges = ranges[valid_idx]
+                k_global = int(hit_global_indices[np.argmin(hit_ranges)])
+
+                hit_vec = hit_positions[k_global, :] - drone_pos
+                bearing_global = float(np.arctan2(hit_vec[1], hit_vec[0]))
+                bearing_rel = _wrap_to_pi(bearing_global - yaw)
+                los_angle = bearing_rel / np.pi  # normalize to [-1, 1]
                 # if self.DRONE_ID == 0:
                 #     print(f"Sector '{sector_labels[j]}' has {cnt_hits} hit(s): min={rmin:.2f}, mean={rmean:.2f}, fraction={hit_density_sector:.2f}")
             else:
                 rmin = 1.0
                 rmean = 1.0
+                los_angle = 0.0  # neutral when no hit
 
-            features.extend([rmin, rmean, hit_density_sector])
+            features.extend([rmin, rmean, hit_density_sector, float(los_angle)])
 
         return np.array(features, dtype=float)
 
